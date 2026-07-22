@@ -1,4 +1,5 @@
 import "server-only";
+import { questionType, type QuizQuestion, type QuestionAnswer, type MatchPair } from "@/types/quiz";
 
 // Ported from server/src/utils/mapAnswerLetter.js plus the normalize/letterOf
 // closures that were redefined per-controller in v1 (SubmissionController,
@@ -54,4 +55,74 @@ export function isAnswerMatch(submitted: string | null | undefined, correctAnswe
     (sl !== null && al !== null && sl === al) ||
     (sl !== null && al === null && sl === resolvedAnswer.toUpperCase())
   );
+}
+
+// ── Multi-type grading (added 2026-07-23 for AI-classified question types) ──
+// Each function returns a 0..1 fraction of `pointsPerCorrect` earned for one
+// question, so the grading route (app/api/submissions/route.ts) can treat
+// every question type uniformly: `score += fraction * pointsPerCorrect`.
+// Grading rules are explicit user decisions (2026-07-23), not guesses:
+// - mcq_multi: partial credit per option (+1/N correct selected, -1/N per
+//   incorrect selected, N = number of correct answers), floored at 0.
+// - match_columns: partial credit per pair (correct pairs / total pairs).
+// - fill_blank: exact match only, case/whitespace-insensitive — no fuzzy/AI
+//   grading, so it's just a boolean via isFillBlankMatch below.
+
+/** Case/whitespace-insensitive exact match for fill-in-the-blank answers. */
+export function isFillBlankMatch(submitted: string | null | undefined, correctAnswer: string): boolean {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  return !!submitted && norm(submitted) === norm(correctAnswer);
+}
+
+/** Partial credit for a multi-correct MCQ: (correct selected - incorrect selected) / total correct, floored at 0. */
+export function scoreMcqMulti(submitted: string[] | null | undefined, correctAnswers: string[]): number {
+  if (!submitted || submitted.length === 0 || correctAnswers.length === 0) return 0;
+  const correctSet = new Set(correctAnswers.map((a) => normalizeAnswer(a)));
+  let correctSelected = 0;
+  let incorrectSelected = 0;
+  for (const s of submitted) {
+    if (correctSet.has(normalizeAnswer(s))) correctSelected++;
+    else incorrectSelected++;
+  }
+  return Math.max(0, (correctSelected - incorrectSelected) / correctAnswers.length);
+}
+
+/** Partial credit for match-the-columns: fraction of pairs the student matched correctly. */
+export function scoreMatchColumns(submitted: Record<string, string> | null | undefined, correctPairs: MatchPair[]): number {
+  if (!submitted || correctPairs.length === 0) return 0;
+  let correct = 0;
+  for (const pair of correctPairs) {
+    if (submitted[pair.left] !== undefined && normalizeAnswer(submitted[pair.left]) === normalizeAnswer(pair.right)) {
+      correct++;
+    }
+  }
+  return correct / correctPairs.length;
+}
+
+/**
+ * Unified entry point: grades one question against its submitted answer,
+ * returning a 0..1 fraction regardless of question type. Missing/legacy
+ * `type` is treated as "mcq_single" via {@link questionType}.
+ */
+export function scoreQuestion(question: QuizQuestion, submitted: QuestionAnswer | null | undefined): number {
+  switch (questionType(question)) {
+    case "mcq_single": {
+      const q = question as Extract<QuizQuestion, { answer: string; options: string[] }>;
+      return isAnswerMatch(typeof submitted === "string" ? submitted : null, q.answer, q.options) ? 1 : 0;
+    }
+    case "mcq_multi": {
+      const q = question as Extract<QuizQuestion, { answers: string[] }>;
+      return scoreMcqMulti(Array.isArray(submitted) ? submitted : null, q.answers);
+    }
+    case "fill_blank": {
+      const q = question as Extract<QuizQuestion, { answer: string; type: "fill_blank" }>;
+      return isFillBlankMatch(typeof submitted === "string" ? submitted : null, q.answer) ? 1 : 0;
+    }
+    case "match_columns": {
+      const q = question as Extract<QuizQuestion, { pairs: MatchPair[] }>;
+      return scoreMatchColumns(submitted && typeof submitted === "object" && !Array.isArray(submitted) ? submitted : null, q.pairs);
+    }
+    default:
+      return 0;
+  }
 }

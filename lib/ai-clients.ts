@@ -1,7 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
 import { mapAnswerLetter } from "./answer-matching";
-import type { QuizQuestion } from "@/types/quiz";
+import type { QuizQuestion, McqSingleQuestion } from "@/types/quiz";
 
 // Ported from server/src/controllers/AIController.js. Both providers use the
 // OpenAI-compatible chat completions API. Falls back to 'not-set' so the
@@ -87,5 +87,5 @@ No markdown fences, no commentary, no trailing text. Start your response with [ 
 
       return { text, options, answer, explanation: String(q.explanation || "") };
     })
-    .filter((q: QuizQuestion) => q.text && q.options.length === 4 && q.options.includes(q.answer));
+    .filter((q: McqSingleQuestion) => q.text && q.options.length === 4 && q.options.includes(q.answer)) as QuizQuestion[];
 }

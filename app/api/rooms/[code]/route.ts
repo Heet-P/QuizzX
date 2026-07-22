@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { sanitizeQuestion } from "@/lib/quiz-sanitize";
 import type { QuizQuestion } from "@/types/quiz";
 
 // GET /api/rooms/:code — ported from RoomController.getRoom. Strips
@@ -23,7 +24,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     return NextResponse.json({ error: "Room not found" }, { status: 404 });
   }
 
-  const questions = ((room.quiz.questions ?? []) as unknown as QuizQuestion[]).map(({ answer: _answer, ...rest }) => rest);
+  const questions = ((room.quiz.questions ?? []) as unknown as QuizQuestion[]).map((q) => sanitizeQuestion(q));
 
   return NextResponse.json({
     id: room.id,

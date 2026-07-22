@@ -2,11 +2,14 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { seededShuffle, questionSeed } from "@/lib/seeded-shuffle";
+import { sanitizeQuestion, shuffleSanitizedQuestion } from "@/lib/quiz-sanitize";
 import type { QuizQuestion, QuizSettings } from "@/types/quiz";
 
 // GET /api/quizzes/:id — ported from QuizController.getQuiz. Applies the
-// seeded per-(quiz,user) shuffle/pool logic and strips `answer` unless the
-// quiz is in practice mode (timer==='none' && tabSwitch==='disabled').
+// seeded per-(quiz,user) shuffle/pool logic and strips the answer key unless
+// the quiz is in practice mode (timer==='none' && tabSwitch==='disabled').
+// Answer-stripping and options-shuffling are type-aware (mcq_single/
+// mcq_multi/fill_blank/match_columns) — see lib/quiz-sanitize.ts.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { user, error } = await requireApiUser();
   if (error) return error;
@@ -41,12 +44,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     questions = seededShuffle(questions, seed);
   }
 
+  const isPractice = settings.timer === "none" && settings.tabSwitch === "disabled";
+
+  let result = questions.map((q) => sanitizeQuestion(q, isPractice));
   if (settings.shuffleOptions) {
-    questions = questions.map((q, i) => ({ ...q, options: seededShuffle(q.options, seed + i + 1) }));
+    result = result.map((q, i) => shuffleSanitizedQuestion(q, seed + i + 1));
   }
 
-  const isPractice = settings.timer === "none" && settings.tabSwitch === "disabled";
-  const sanitized = isPractice ? questions : questions.map(({ answer: _answer, ...rest }) => rest);
-
-  return NextResponse.json({ id: quiz.id, title: quiz.title, settings: quiz.settings, questions: sanitized });
+  return NextResponse.json({ id: quiz.id, title: quiz.title, settings: quiz.settings, questions: result });
 }

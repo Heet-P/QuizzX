@@ -130,20 +130,96 @@ export function isPracticeMode(settings: QuizSettings): boolean {
   return settings.timer === "none" && settings.tabSwitch === "disabled";
 }
 
-export interface QuizQuestion {
+// ── Question types ──────────────────────────────────────────────────────────
+// v1 only ever had one shape (single-correct MCQ). Extended 2026-07-23 per
+// explicit user request: AI-assisted quiz-document parsing that classifies
+// each question into one of four types and extracts type-appropriate answers.
+// `type` is optional on McqSingleQuestion specifically so that every quiz
+// created before this existed (no `type` field in stored JSON at all) keeps
+// working without a data migration — treat a missing `type` as "mcq_single"
+// everywhere via `questionType()` below, never assume `q.type` is set.
+
+export type QuestionType = "mcq_single" | "mcq_multi" | "fill_blank" | "match_columns";
+
+interface QuestionCommon {
   text: string;
   code?: string | null;
   prompt?: string | null;
-  options: string[];
-  answer: string;
   explanation?: string | null;
   topic?: string | null;
 }
 
-/** Question shape as served to the quiz-taking client — answer stripped unless practice mode. */
-export type SanitizedQuizQuestion = Omit<QuizQuestion, "answer"> & {
-  answer?: string;
+export interface McqSingleQuestion extends QuestionCommon {
+  type?: "mcq_single";
+  options: string[];
+  answer: string;
+}
+
+export interface McqMultiQuestion extends QuestionCommon {
+  type: "mcq_multi";
+  options: string[];
+  /** All options that are correct — grading gives partial credit per selection (Section: user decision 2026-07-23). */
+  answers: string[];
+}
+
+export interface FillBlankQuestion extends QuestionCommon {
+  type: "fill_blank";
+  /** Graded via case/whitespace-insensitive exact match (user decision 2026-07-23) — no fuzzy/AI grading. */
+  answer: string;
+}
+
+export interface MatchPair {
+  left: string;
+  right: string;
+}
+
+export interface MatchColumnsQuestion extends QuestionCommon {
+  type: "match_columns";
+  /** Canonical correct left→right pairs. Never sent to the client as-is — see MatchColumnsSanitized. */
+  pairs: MatchPair[];
+}
+
+export type QuizQuestion = McqSingleQuestion | McqMultiQuestion | FillBlankQuestion | MatchColumnsQuestion;
+
+/**
+ * Reads a question's type, defaulting missing/legacy data to "mcq_single".
+ * Accepts any question-shaped object with an optional `type` — both the raw
+ * `QuizQuestion` union and the sanitized/client-facing shapes share this
+ * field, so one function works for both without a second overload.
+ */
+export function questionType(q: { type?: QuestionType }): QuestionType {
+  return q.type ?? "mcq_single";
+}
+
+// ── Sanitized (answer-key-stripped) shapes served to the quiz-taking client ──
+
+export type McqSingleSanitized = Omit<McqSingleQuestion, "answer"> & { answer?: string };
+export type McqMultiSanitized = Omit<McqMultiQuestion, "answers"> & { answers?: string[] };
+export type FillBlankSanitized = Omit<FillBlankQuestion, "answer"> & { answer?: string };
+/**
+ * `pairs` (the answer key) is replaced with two separately-shuffle-able
+ * lists — never sent as the original mapping. `pairs` is still allowed here
+ * as an *optional* field purely for practice mode (see sanitizeQuestion's
+ * `revealAnswers` flag), where the answer key is deliberately included
+ * alongside the display lists for instant feedback.
+ */
+export type MatchColumnsSanitized = Omit<MatchColumnsQuestion, "pairs"> & {
+  leftItems: string[];
+  rightItems: string[];
+  pairs?: MatchPair[];
 };
+
+export type SanitizedQuizQuestion = McqSingleSanitized | McqMultiSanitized | FillBlankSanitized | MatchColumnsSanitized;
+
+// ── Per-question submitted-answer shapes ────────────────────────────────────
+// Keyed by question index in the submission's `answers` JSON blob, same as v1.
+export type McqSingleAnswer = string;
+export type McqMultiAnswer = string[];
+export type FillBlankAnswer = string;
+/** Keyed by left-item text (the stable side) -> the right-item text the student paired it with. */
+export type MatchColumnsAnswer = Record<string, string>;
+
+export type QuestionAnswer = McqSingleAnswer | McqMultiAnswer | FillBlankAnswer | MatchColumnsAnswer;
 
 export type QuizStatus = "draft" | "live" | "archived";
 

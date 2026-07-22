@@ -35,10 +35,19 @@ import {
   SkipForward,
   Siren,
   Check,
+  FileSearch,
 } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { apiFetch, errorMessage } from "@/lib/api-client";
-import type { QuizSettings, QuizQuestion } from "@/types/quiz";
+import {
+  questionType,
+  type QuizSettings,
+  type QuizQuestion,
+  type McqSingleQuestion,
+  type McqMultiQuestion,
+  type FillBlankQuestion,
+  type MatchColumnsQuestion,
+} from "@/types/quiz";
 
 type ModularSettings = Pick<
   QuizSettings,
@@ -431,6 +440,71 @@ function SharedSettings({
   );
 }
 
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  mcq_single: "Single Correct",
+  mcq_multi: "Multi Correct",
+  fill_blank: "Fill in the Blank",
+  match_columns: "Match the Columns",
+};
+
+/** Type-aware answer-key preview for one question — added 2026-07-23 alongside AI multi-type parsing. */
+function QuestionPreviewBody({ question }: { question: QuizQuestion }) {
+  switch (questionType(question)) {
+    case "mcq_single": {
+      const q = question as McqSingleQuestion;
+      return (
+        <>
+          {q.options.map((opt, j) => (
+            <div
+              key={j}
+              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-[var(--radius-chip)] font-accent font-bold ${opt === q.answer ? "bg-green" : "bg-white border border-ink/10"}`}
+            >
+              {opt === q.answer && <Check size={12} />} {opt}
+            </div>
+          ))}
+        </>
+      );
+    }
+    case "mcq_multi": {
+      const q = question as McqMultiQuestion;
+      return (
+        <>
+          {q.options.map((opt, j) => (
+            <div
+              key={j}
+              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-[var(--radius-chip)] font-accent font-bold ${q.answers.includes(opt) ? "bg-green" : "bg-white border border-ink/10"}`}
+            >
+              {q.answers.includes(opt) && <Check size={12} />} {opt}
+            </div>
+          ))}
+        </>
+      );
+    }
+    case "fill_blank": {
+      const q = question as FillBlankQuestion;
+      return (
+        <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-[var(--radius-chip)] font-accent font-bold bg-green">
+          <Check size={12} /> {q.answer}
+        </div>
+      );
+    }
+    case "match_columns": {
+      const q = question as MatchColumnsQuestion;
+      return (
+        <div className="space-y-1">
+          {q.pairs.map((pair, j) => (
+            <div key={j} className="flex items-center gap-2 text-xs font-accent font-bold">
+              <span className="px-2 py-1 rounded-[var(--radius-chip)] bg-white border border-ink/10">{pair.left}</span>
+              <ArrowLeftRight size={12} className="text-ink/40 shrink-0" />
+              <span className="px-2 py-1 rounded-[var(--radius-chip)] bg-green">{pair.right}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+  }
+}
+
 function QuestionPreview({ questions, onClear }: { questions: QuizQuestion[]; onClear: () => void }) {
   const [expanded, setExpanded] = useState<number | null>(null);
   return (
@@ -449,20 +523,19 @@ function QuestionPreview({ questions, onClear }: { questions: QuizQuestion[]; on
           <button
             type="button"
             onClick={() => setExpanded(expanded === i ? null : i)}
-            className="w-full flex items-center justify-between p-2 text-left text-ink bg-cream hover:bg-cream-alt transition-colors"
+            className="w-full flex items-center justify-between gap-2 p-2 text-left text-ink bg-cream hover:bg-cream-alt transition-colors"
           >
-            <span className="font-accent font-bold text-xs truncate pr-2">
+            <span className="font-accent font-bold text-xs truncate flex-1">
               Q{i + 1}: {q.text}
+            </span>
+            <span className="shrink-0 text-[10px] font-accent font-bold uppercase px-2 py-0.5 rounded-[var(--radius-chip)] bg-purple text-white">
+              {QUESTION_TYPE_LABELS[questionType(q)]}
             </span>
             {expanded === i ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
           {expanded === i && (
             <div className="p-3 space-y-1">
-              {q.options.map((opt, j) => (
-                <div key={j} className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-[var(--radius-chip)] font-accent font-bold ${opt === q.answer ? "bg-green" : "bg-white border border-ink/10"}`}>
-                  {opt === q.answer && <Check size={12} />} {opt}
-                </div>
-              ))}
+              <QuestionPreviewBody question={q} />
               {q.explanation && <p className="text-xs text-ink/50 mt-1 italic">{q.explanation}</p>}
             </div>
           )}
@@ -480,13 +553,17 @@ function QuestionPreview({ questions, onClear }: { questions: QuizQuestion[]; on
 // activates with zero code changes needed).
 export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
   const toast = useToast();
-  const [tab, setTab] = useState<"upload" | "ai">("upload");
+  const [tab, setTab] = useState<"upload" | "ai" | "ai-parse">("upload");
 
   const [aiTopic, setAiTopic] = useState("");
   const [aiSyllabus, setAiSyllabus] = useState("");
   const [aiCount, setAiCount] = useState(10);
   const [generating, setGenerating] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<QuizQuestion[] | null>(null);
+
+  const [parseFile, setParseFile] = useState<File | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [parsedQuestions, setParsedQuestions] = useState<QuizQuestion[] | null>(null);
 
   const [quizFile, setQuizFile] = useState<File | null>(null);
 
@@ -582,9 +659,8 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
     }
   };
 
-  const handleCreateFromAI = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!generatedQuestions?.length || !quizTitle) return;
+  const createQuizFromQuestions = async (questions: QuizQuestion[], onSuccess: () => void) => {
+    if (!questions.length || !quizTitle) return;
     const finalSettings = {
       ...settings,
       startAt: startAt || null,
@@ -597,18 +673,53 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
       const data = await apiFetch<{ questionCount: number }>("/api/admin/quizzes/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: quizTitle, questions: generatedQuestions, settings: finalSettings }),
+        body: JSON.stringify({ title: quizTitle, questions, settings: finalSettings }),
       });
       toast.success(`Quiz created! ${data.questionCount} questions.`);
-      setGeneratedQuestions(null);
-      setAiTopic("");
-      setAiSyllabus("");
-      setAiCount(10);
+      onSuccess();
       resetShared();
       fetchQuizzes();
     } catch (err) {
       toast.error(errorMessage(err, "Failed to create quiz"));
     }
+  };
+
+  const handleCreateFromAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!generatedQuestions?.length) return;
+    await createQuizFromQuestions(generatedQuestions, () => {
+      setGeneratedQuestions(null);
+      setAiTopic("");
+      setAiSyllabus("");
+      setAiCount(10);
+    });
+  };
+
+  const handleParseDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!parseFile) return;
+    setParsing(true);
+    setParsedQuestions(null);
+    try {
+      const formData = new FormData();
+      formData.append("quizFile", parseFile);
+      const data = await apiFetch<{ questions: QuizQuestion[] }>("/api/ai/parse-quiz-doc", { method: "POST", body: formData });
+      setParsedQuestions(data.questions);
+      toast.success(`${data.questions.length} questions parsed!`);
+    } catch (err) {
+      toast.error(errorMessage(err, "AI document parsing failed"));
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleCreateFromParsed = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!parsedQuestions?.length) return;
+    await createQuizFromQuestions(parsedQuestions, () => {
+      setParsedQuestions(null);
+      setParseFile(null);
+    });
   };
 
   return (
@@ -632,12 +743,25 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
         >
           <Sparkles size={16} /> AI Generate
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("ai-parse")}
+          className={`flex items-center gap-2 px-4 py-2 font-accent font-bold text-sm rounded-[var(--radius-btn)] border-2 border-white/40 transition-all ${
+            tab === "ai-parse" ? "bg-white text-purple" : "bg-transparent text-white hover:bg-white/20"
+          }`}
+        >
+          <FileSearch size={16} /> AI Parse Document
+        </button>
       </div>
 
       <h2 className="mb-6 flex items-center gap-2 text-xl font-display">
         {tab === "ai" ? (
           <>
             <Sparkles /> AI Quiz Generator
+          </>
+        ) : tab === "ai-parse" ? (
+          <>
+            <FileSearch /> AI Document Parser
           </>
         ) : (
           <>
@@ -757,6 +881,75 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
 
               <button type="submit" className="btn-tactile w-full justify-center bg-green text-ink text-lg py-3">
                 <Sparkles size={20} /> Create AI Quiz ({generatedQuestions.length} questions)
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
+      {tab === "ai-parse" && (
+        <div className="space-y-5 text-ink">
+          <div className="bg-white rounded-[var(--radius-card-sm)] p-4 space-y-4">
+            <h3 className="font-accent font-bold uppercase text-sm border-b border-ink/10 pb-2">Upload Quiz Document</h3>
+            <p className="text-xs text-ink/60">
+              AI reads your document and automatically detects each question&apos;s type — single-correct MCQ, multi-correct MCQ,
+              fill-in-the-blank, or match-the-columns — and extracts the matching answer key. Review the results below before creating the quiz.
+            </p>
+            <div>
+              <label className="block font-accent font-bold text-xs uppercase mb-1">Quiz File (.md, .txt, .docx)</label>
+              <input
+                type="file"
+                accept=".md,.markdown,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(e) => setParseFile(e.target.files?.[0] ?? null)}
+                className="w-full cursor-pointer bg-cream rounded-[var(--radius-btn)] p-2 file:mr-4 file:border-0 file:rounded-[var(--radius-btn)] file:bg-ink file:px-4 file:py-2 file:text-white file:font-accent file:font-bold"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleParseDocument}
+              disabled={parsing || !parseFile}
+              className="btn-tactile bg-blue text-white w-full justify-center py-3 disabled:opacity-50"
+            >
+              {parsing ? (
+                <>
+                  <Loader size={18} className="animate-spin" /> Parsing document…
+                </>
+              ) : (
+                <>
+                  <FileSearch size={18} /> Parse with AI
+                </>
+              )}
+            </button>
+          </div>
+
+          {parsedQuestions && (
+            <QuestionPreview
+              questions={parsedQuestions}
+              onClear={() => {
+                setParsedQuestions(null);
+                setParseFile(null);
+              }}
+            />
+          )}
+
+          {parsedQuestions && (
+            <form onSubmit={handleCreateFromParsed} className="space-y-5">
+              <div className="bg-white rounded-[var(--radius-card-sm)] p-4">
+                <label className="block font-accent font-bold text-white uppercase text-sm mb-1">Quiz Title *</label>
+                <input
+                  type="text"
+                  value={quizTitle}
+                  onChange={(e) => setQuizTitle(e.target.value)}
+                  className="input-tactile"
+                  placeholder="e.g. C Programming Final"
+                  required
+                />
+              </div>
+
+              <SharedSettings {...sharedSettingsProps} />
+
+              <button type="submit" className="btn-tactile w-full justify-center bg-green text-ink text-lg py-3">
+                <FileSearch size={20} /> Create Quiz ({parsedQuestions.length} questions)
               </button>
             </form>
           )}

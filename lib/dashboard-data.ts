@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
-import type { QuizSettings } from "@/types/quiz";
+import { scoreQuestion } from "./answer-matching";
+import type { QuizSettings, QuizQuestion, QuestionAnswer } from "@/types/quiz";
 
 // Data-fetching for the /dashboard page. Each function here is a direct Prisma
 // port of one of v1's dashboard endpoints (server/src/controllers/UserController.js,
@@ -92,17 +93,16 @@ export interface WeakTopic {
   accuracy: number;
 }
 
-function normalizeAnswer(s: string | null | undefined): string {
-  return (s ?? "").replace(/^[A-Za-z]\)\s*/, "").trim().toLowerCase();
-}
-
 /**
  * Exact port of v1's UserController.getWeakTopics accuracy algorithm — last 20
  * completed submissions, aggregated by question `topic` (falling back to
  * "General"), sorted worst-accuracy-first. Recomputes against the quiz's
  * *current* questions/answer key, not a frozen snapshot of what the user saw
  * at attempt time — this is a known v1 quirk, preserved intentionally for
- * parity rather than silently "fixed" during the port.
+ * parity rather than silently "fixed" during the port. Extended 2026-07-23 to
+ * use scoreQuestion so mcq_multi/fill_blank/match_columns questions aggregate
+ * correctly instead of being graded as plain string equality (a miss is now
+ * "fraction < 1", matching the partial-credit-aware grading used elsewhere).
  */
 export async function getWeakTopics(userId: string): Promise<WeakTopic[]> {
   const subs = await prisma.submission.findMany({
@@ -116,16 +116,16 @@ export async function getWeakTopics(userId: string): Promise<WeakTopic[]> {
   const topicMisses = new Map<string, number>();
 
   for (const row of subs) {
-    const answers = row.answers as Record<string, string> | null;
-    const questions = row.quiz?.questions as Array<{ topic?: string | null; answer?: string }> | null;
+    const answers = row.answers as Record<string, QuestionAnswer> | null;
+    const questions = row.quiz?.questions as unknown as QuizQuestion[] | null;
     if (!questions || !answers) continue;
 
     questions.forEach((q, idx) => {
       const topic = q.topic || "General";
       topicTotals.set(topic, (topicTotals.get(topic) ?? 0) + 1);
 
-      const submitted = answers[String(idx)] ?? (answers as unknown as string[])[idx];
-      if (!submitted || normalizeAnswer(submitted) !== normalizeAnswer(q.answer)) {
+      const submitted = answers[String(idx)] ?? (answers as unknown as QuestionAnswer[])[idx];
+      if (scoreQuestion(q, submitted) < 1) {
         topicMisses.set(topic, (topicMisses.get(topic) ?? 0) + 1);
       }
     });

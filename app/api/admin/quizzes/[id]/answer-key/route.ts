@@ -3,7 +3,7 @@ import mammoth from "mammoth";
 import { requireApiAdmin } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { mapAnswerLetter } from "@/lib/answer-matching";
-import type { QuizQuestion } from "@/types/quiz";
+import { questionType, type QuizQuestion } from "@/types/quiz";
 
 // POST /api/admin/quizzes/:id/answer-key — ported from AdminController.uploadAnswerKey.
 // Parses "Q1: D" / "1: A" style text and maps letters onto stored questions.
@@ -41,10 +41,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     for (const [idxStr, letter] of Object.entries(answerMap)) {
       const idx = parseInt(idxStr);
       const q = questions[idx];
-      if (!q) continue;
-      const resolved = mapAnswerLetter(letter, q.options);
+      // Letter->option mapping only makes sense for single-correct MCQ —
+      // other question types (added 2026-07-23) have no "options" to map onto.
+      if (!q || questionType(q) !== "mcq_single") continue;
+      const mcq = q as Extract<QuizQuestion, { answer: string; options: string[] }>;
+      const resolved = mapAnswerLetter(letter, mcq.options);
       if (resolved) {
-        q.answer = resolved;
+        mcq.answer = resolved;
         mapped++;
       }
     }

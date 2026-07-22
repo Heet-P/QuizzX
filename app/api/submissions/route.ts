@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/lib/generated/prisma/client";
-import { isAnswerMatch } from "@/lib/answer-matching";
+import { scoreQuestion } from "@/lib/answer-matching";
 import { getLevel } from "@/lib/xp";
-import type { QuizQuestion, QuizSettings } from "@/types/quiz";
+import type { QuizQuestion, QuizSettings, QuestionAnswer } from "@/types/quiz";
 
 type Tx = Prisma.TransactionClient;
 
@@ -132,16 +132,27 @@ export async function POST(req: Request) {
       const pointsPerCorrect = settings.pointsPerCorrect || 1;
       const negativeMarking = settings.negativeMarking || 0;
 
+      // Type-aware scoring (2026-07-23): scoreQuestion returns a 0..1 fraction
+      // of pointsPerCorrect for any question type. `correct`/`wrong` (used
+      // for the negative-marking term and the "X/Y correct" stat shown to
+      // the user) are based on that fraction: 1 = fully correct, 0 = fully
+      // wrong (attempted but earned nothing), anything in between is partial
+      // credit (mcq_multi/match_columns) — counted in the score but not in
+      // either bucket, matching the explicit partial-credit decisions this
+      // grading was built against.
       let correct = 0;
       let wrong = 0;
+      let pointsFromCorrect = 0;
       questions.forEach((q, idx) => {
-        const submitted = answers[String(idx)] ?? (answers as unknown as string[])[idx];
-        if (!submitted || !q.answer) return;
-        if (isAnswerMatch(submitted, q.answer, q.options)) correct++;
-        else wrong++;
+        const submitted = (answers[String(idx)] ?? (answers as unknown as QuestionAnswer[])[idx]) as QuestionAnswer | undefined;
+        if (submitted === undefined || submitted === null || submitted === "") return;
+        const fraction = scoreQuestion(q, submitted);
+        pointsFromCorrect += fraction * pointsPerCorrect;
+        if (fraction >= 1) correct++;
+        else if (fraction === 0) wrong++;
       });
 
-      const score = Math.max(0, correct * pointsPerCorrect + wrong * negativeMarking);
+      const score = Math.max(0, Math.round(pointsFromCorrect + wrong * negativeMarking));
 
       if (draftId) {
         await tx.submission.update({

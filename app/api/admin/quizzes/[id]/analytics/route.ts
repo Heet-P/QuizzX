@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireApiAdmin } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { normalizeAnswer, letterOf } from "@/lib/answer-matching";
-import type { QuizQuestion } from "@/types/quiz";
+import { scoreQuestion } from "@/lib/answer-matching";
+import type { QuizQuestion, QuestionAnswer } from "@/types/quiz";
 
 // GET /api/admin/quizzes/:id/analytics — per-question accuracy + top wrong
-// answer, ported from AdminService.getQuizAnalytics.
+// answer, ported from AdminService.getQuizAnalytics. Uses the shared
+// type-aware `scoreQuestion` (2026-07-23) so mcq_multi/fill_blank/
+// match_columns questions get sensible accuracy numbers too, not just
+// mcq_single. "Top wrong answer" only really applies to single-string
+// answer types (mcq_single/fill_blank) — skipped for the others.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { error } = await requireApiAdmin();
   if (error) return error;
@@ -27,19 +31,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }));
 
   for (const sub of submissions) {
-    const answers = sub.answers as Record<string, string> | null;
+    const answers = sub.answers as Record<string, QuestionAnswer> | null;
     if (!answers) continue;
     questions.forEach((q, idx) => {
-      const submitted = answers[String(idx)] ?? (answers as unknown as string[])[idx];
-      if (!submitted) return;
+      const submitted = answers[String(idx)] ?? (answers as unknown as QuestionAnswer[])[idx];
+      if (submitted === undefined || submitted === null || submitted === "") return;
       stats[idx].total++;
-      const isMatch =
-        submitted === q.answer || normalizeAnswer(submitted) === normalizeAnswer(q.answer || "") || letterOf(submitted) === letterOf(q.answer || "");
-      if (isMatch) {
+      const fraction = scoreQuestion(q, submitted);
+      if (fraction >= 1) {
         stats[idx].correct++;
       } else {
         stats[idx].wrong++;
-        stats[idx].wrongAnswers[submitted] = (stats[idx].wrongAnswers[submitted] || 0) + 1;
+        if (typeof submitted === "string") {
+          stats[idx].wrongAnswers[submitted] = (stats[idx].wrongAnswers[submitted] || 0) + 1;
+        }
       }
     });
   }

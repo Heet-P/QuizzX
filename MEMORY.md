@@ -1404,3 +1404,80 @@ If you're picking this project up cold, in order:
 8. Nothing is committed to git (Section 14) — if you're asked to commit,
    confirm scope with the user rather than assuming; this working tree
    represents a large amount of unreviewed, uncommitted work.
+
+---
+
+## 17. Multi-Type Question System + AI Document Parser (2026-07-23)
+
+Added per explicit user request, on top of the Phase 1-6 work above. Two
+parts: (a) extended the quiz question model from single-correct-MCQ-only to
+4 types, and (b) built a new AI-powered parser that classifies+extracts all
+4 types from an uploaded document.
+
+**17.1 — The 4 question types** (`types/quiz.ts`): `QuizQuestion` is now a
+discriminated union — `McqSingleQuestion` (`type` optional, defaults to
+`mcq_single` for every pre-existing quiz with no `type` field at all — no
+data migration needed), `McqMultiQuestion` (`answers: string[]`),
+`FillBlankQuestion` (`answer: string`), `MatchColumnsQuestion`
+(`pairs: {left, right}[]`). `questionType(q)` is the one place that reads
+`q.type ?? "mcq_single"` — every consumer uses this rather than checking
+`q.type` directly. Sanitized (answer-key-stripped) equivalents exist for the
+client (`SanitizedQuizQuestion` in the same file); `lib/quiz-sanitize.ts`
+strips answers and, for match-columns, splits `pairs` into separately-
+shufflable `leftItems`/`rightItems`.
+
+**17.2 — Grading rules** (`lib/answer-matching.ts`'s `scoreQuestion`, the
+single entry point every grading route now uses) — all 3 are explicit user
+decisions made 2026-07-23, not judgment calls:
+- **mcq_multi**: partial credit per option — `max(0, (correctSelected -
+  incorrectSelected) / totalCorrectAnswers)`.
+- **match_columns**: partial credit per pair — `correctPairsMatched /
+  totalPairs`.
+- **fill_blank**: exact match only, case/whitespace-insensitive — no
+  fuzzy/AI grading.
+- **mcq_single**: unchanged, same `isAnswerMatch` letter/text matching as v1.
+
+`scoreQuestion` is used by `/api/submissions`, `/api/rooms/[code]/answer`,
+`/api/admin/quizzes/[id]/analytics`, and `lib/dashboard-data.ts`'s
+`getWeakTopics` (previously did its own flat string-equality check that
+would have silently mis-scored the 3 new types — fixed as part of this
+work). `lib/quiz-client-scoring.ts` has a separate, client-safe (no
+`server-only`) set of correctness checks used only for practice-mode instant
+feedback in `QuizClient.tsx` — deliberately not the same module as the real
+grading path.
+
+**17.3 — AI document parser** (`lib/ai-quiz-parser.ts` +
+`app/api/ai/parse-quiz-doc/route.ts`, admin-only): takes the same
+`.md`/`.txt`/`.docx` upload the existing regex parser (`lib/quiz-parser.ts`)
+accepts, but sends the extracted text to Groq asking it to classify each
+question into one of the 4 types and extract type-appropriate answers,
+returning strict JSON. **Added as a new option alongside the old regex
+parser, not a replacement** (explicit user decision) — `QuizUploader.tsx`
+now has 3 tabs: "Upload File" (regex, mcq_single only), "AI Generate"
+(topic → new questions), "AI Parse Document" (upload → AI-classified
+questions). All 3 converge on the same review-before-create flow: parse/
+generate → `QuestionPreview` (type-aware, shows a type badge + the correct
+answer(s) per type) → `POST /api/admin/quizzes/create`.
+
+**Model choice**: uses `GROQ_MODEL` (`llama-3.3-70b-versatile`), **not**
+`NIM_MODEL` (`meta/llama-3.1-8b-instruct`), even though the user's question
+was originally about which NVIDIA NIM model to use. Reasoning: this existing
+codebase already splits AI work by task weight — NIM's 8B model is used
+for short, low-stakes streamed responses (`/api/ai/distractors`,
+`/api/ai/explain`), while Groq's 70B model is used wherever the task is
+larger/harder JSON generation (`generateQuestions`, `/api/ai/format-quiz`).
+Classifying a whole document's questions into 4 different JSON shapes while
+staying faithful to the source text is squarely in the "harder JSON task"
+category, so it follows the existing Groq-for-heavy-lifting pattern rather
+than introducing a new NIM model. Both providers are free-tier for this
+project's expected volume — this was a capability choice, not a cost
+tradeoff. If NIM is ever preferred instead, the closest free/strong model in
+its catalogue for structured extraction would be a 70B-class instruct model
+(e.g. `nvidia/llama-3.1-nemotron-70b-instruct` or `meta/llama-3.1-70b-instruct`),
+not the 8B model already wired up as `NIM_MODEL`.
+
+**Not done / left as-is**: no chunking for very long documents (input is
+truncated at 15,000 chars, same substring-truncation pattern as the
+existing `/api/ai/format-quiz`); malformed items from the model's JSON are
+silently dropped rather than surfaced to the admin (matches the existing
+`generateQuestions` filtering behavior).

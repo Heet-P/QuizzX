@@ -14,12 +14,22 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { useQuizCheating } from "@/hooks/useQuizCheating";
 import { useToast } from "@/components/Toast";
 import { apiFetch } from "@/lib/api-client";
-import { normalizeQuizSettings, type QuizQuestion } from "@/types/quiz";
+import {
+  normalizeQuizSettings,
+  questionType,
+  type SanitizedQuizQuestion,
+  type QuestionAnswer,
+  type McqSingleSanitized,
+  type McqMultiSanitized,
+  type FillBlankSanitized,
+  type MatchColumnsSanitized,
+} from "@/types/quiz";
+import { mcqMultiIsFullyCorrect, fillBlankIsCorrect, matchColumnsIsFullyCorrect } from "@/lib/quiz-client-scoring";
 
 interface QuizData {
   id: string;
   title: string;
-  questions?: QuizQuestion[];
+  questions?: SanitizedQuizQuestion[];
   settings?: Record<string, unknown>;
   alreadyCompleted?: boolean;
   score?: number;
@@ -52,8 +62,8 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
   const toast = useToast();
 
   const [quiz, setQuiz] = useState<QuizData | null>(null);
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
-  const [answers, setAnswers] = useState<Record<number, string>>(() => {
+  const [questions, setQuestions] = useState<SanitizedQuizQuestion[]>([]);
+  const [answers, setAnswers] = useState<Record<number, QuestionAnswer>>(() => {
     if (typeof window === "undefined") return {};
     try {
       const saved = window.localStorage.getItem(`quiz_progress_${id}`);
@@ -74,7 +84,7 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
   const [pinVerified, setPinVerified] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
 
-  const answersRef = useRef<Record<number, string>>({});
+  const answersRef = useRef<Record<number, QuestionAnswer>>({});
   const submittedRef = useRef(false);
   const nonceRef = useRef<string | null>(null);
 
@@ -154,7 +164,7 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
     }
   }, [id]);
 
-  const lastSavedAnswersRef = useRef<Record<number, string>>({});
+  const lastSavedAnswersRef = useRef<Record<number, QuestionAnswer>>({});
   useEffect(() => {
     if (!quiz || submittedRef.current || isPractice || Object.keys(answers).length === 0) return;
 
@@ -247,21 +257,46 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
     if (success) setShowRules(false);
   };
 
+  // Handles all 4 question types (extended 2026-07-23 — v1 only ever had
+  // mcq_single). mcq_single keeps its exact original behavior (lock +
+  // feedback immediately on select, streak tracked). The 3 new types don't
+  // auto-lock in practice mode — multi-select and match-columns need several
+  // interactions before an answer is "done", and locking after the first
+  // click would make them unusable — so feedback just recomputes live as the
+  // student adjusts, without forcing a lock or touching the streak counter.
   const handleOptionSelect = useCallback(
-    (questionIndex: number, option: string) => {
+    (questionIndex: number, newAnswer: QuestionAnswer) => {
       if (locked[questionIndex]) return;
-      setAnswers((prev) => ({ ...prev, [questionIndex]: option }));
+      setAnswers((prev) => ({ ...prev, [questionIndex]: newAnswer }));
 
-      if (s.answerLock === "lock_on_select") {
+      const q = questions[questionIndex];
+      const type = questionType(q);
+
+      if (type === "mcq_single" && s.answerLock === "lock_on_select") {
         setLocked((prev) => ({ ...prev, [questionIndex]: true }));
       }
 
       if (isPractice) {
-        const q = questions[questionIndex];
-        const isCorrect = !!q.answer && option === q.answer;
+        let isCorrect = false;
+        if (type === "mcq_single") {
+          const mcq = q as McqSingleSanitized;
+          isCorrect = !!mcq.answer && newAnswer === mcq.answer;
+        } else if (type === "mcq_multi") {
+          const multi = q as McqMultiSanitized;
+          isCorrect = mcqMultiIsFullyCorrect(newAnswer as string[], multi.answers ?? []);
+        } else if (type === "fill_blank") {
+          const blank = q as FillBlankSanitized;
+          isCorrect = fillBlankIsCorrect(newAnswer as string, blank.answer ?? "");
+        } else if (type === "match_columns") {
+          const match = q as MatchColumnsSanitized;
+          if (match.pairs) isCorrect = matchColumnsIsFullyCorrect(newAnswer as Record<string, string>, match.pairs);
+        }
         setFeedback((prev) => ({ ...prev, [questionIndex]: isCorrect ? "correct" : "wrong" }));
-        setLocked((prev) => ({ ...prev, [questionIndex]: true }));
-        setStreak((prev) => (isCorrect ? prev + 1 : 0));
+
+        if (type === "mcq_single") {
+          setLocked((prev) => ({ ...prev, [questionIndex]: true }));
+          setStreak((prev) => (isCorrect ? prev + 1 : 0));
+        }
       }
     },
     [locked, s.answerLock, isPractice, questions]

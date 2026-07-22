@@ -1,24 +1,36 @@
 import { memo } from "react";
 import { CheckCircle, XCircle, Bookmark, BookmarkCheck, Lock, Lightbulb } from "lucide-react";
-import type { QuizQuestion } from "@/types/quiz";
+import {
+  questionType,
+  type SanitizedQuizQuestion,
+  type QuestionAnswer,
+  type McqSingleSanitized,
+  type McqMultiSanitized,
+  type FillBlankSanitized,
+  type MatchColumnsSanitized,
+} from "@/types/quiz";
 
 interface QuestionCardProps {
-  question: QuizQuestion;
+  question: SanitizedQuizQuestion;
   idx: number;
-  answer: string | undefined;
+  answer: QuestionAnswer | undefined;
   feedback: "correct" | "wrong" | undefined;
   isLocked: boolean;
-  onSelect: (idx: number, option: string) => void;
+  onSelect: (idx: number, newAnswer: QuestionAnswer) => void;
   isPractice: boolean;
   isFlagged: boolean;
   onToggleFlag: (idx: number) => void;
 }
 
-// Ported from client/src/components/quiz/QuestionCard.jsx. Practice-mode
-// correctness here is a simple exact-match (`option === q.answer`), same as
-// v1 — MIGRATION_AUDIT.md Section 9 flags this as an open question (should it
-// share the server's letter/positional-match logic instead?) rather than a
-// decided behavior; preserved as-is pending that decision.
+// Ported from client/src/components/quiz/QuestionCard.jsx (mcq_single only in
+// v1). Extended 2026-07-23 to render all 4 AI-classifiable question types —
+// see types/quiz.ts's header comment for the type system this renders.
+// Practice-mode correctness for mcq_single is still a simple exact-match
+// (`option === q.answer`), same as v1 — MIGRATION_AUDIT.md Section 9 flags
+// this as a still-open question (should it share the server's matching
+// logic instead?) rather than a decided behavior; preserved as-is. The 3 new
+// types use lib/quiz-client-scoring.ts (deliberately not the server-only
+// grading module) for the same low-stakes instant-feedback purpose.
 export const QuestionCard = memo(function QuestionCard({
   question,
   idx,
@@ -30,6 +42,8 @@ export const QuestionCard = memo(function QuestionCard({
   isFlagged,
   onToggleFlag,
 }: QuestionCardProps) {
+  const type = questionType(question);
+
   return (
     <div id={`q-${idx}`} className={`card-tactile p-6 ${isLocked && !isPractice ? "opacity-70" : ""}`}>
       <div className="mb-4 flex items-start gap-3">
@@ -66,38 +80,46 @@ export const QuestionCard = memo(function QuestionCard({
         </span>
       )}
 
-      <div className="space-y-2">
-        {question.options.map((option, optIdx) => {
-          let optionClass = "bg-white border-ink/10 hover:bg-cream-alt";
-          const isSelected = answer === option;
-
-          if (isSelected && feedback === "correct") optionClass = "bg-green border-green text-ink";
-          else if (isSelected && feedback === "wrong") optionClass = "bg-coral border-coral text-white";
-          else if (isSelected) optionClass = "bg-ink text-white border-ink";
-
-          if (feedback === "wrong" && question.answer === option) optionClass = "bg-green border-green border-2";
-
-          return (
-            <label
-              key={optIdx}
-              className={`flex cursor-pointer items-center p-3 rounded-[var(--radius-btn)] border-2 transition-all ${optionClass} ${isLocked ? "cursor-not-allowed opacity-80" : ""}`}
-            >
-              <input
-                type="radio"
-                name={`q-${idx}`}
-                className="hidden"
-                checked={isSelected}
-                onChange={() => onSelect(idx, option)}
-                disabled={isLocked}
-              />
-              <span className="font-mono flex-1">{option}</span>
-              {feedback === "correct" && isSelected && <CheckCircle size={20} />}
-              {feedback === "wrong" && isSelected && <XCircle size={20} />}
-              {feedback === "wrong" && question.answer === option && <CheckCircle size={20} />}
-            </label>
-          );
-        })}
-      </div>
+      {type === "mcq_single" && (
+        <McqSingleBody
+          question={question as McqSingleSanitized}
+          idx={idx}
+          answer={typeof answer === "string" ? answer : undefined}
+          feedback={feedback}
+          isLocked={isLocked}
+          onSelect={onSelect}
+        />
+      )}
+      {type === "mcq_multi" && (
+        <McqMultiBody
+          question={question as McqMultiSanitized}
+          idx={idx}
+          answer={Array.isArray(answer) ? answer : []}
+          feedback={feedback}
+          isLocked={isLocked}
+          onSelect={onSelect}
+        />
+      )}
+      {type === "fill_blank" && (
+        <FillBlankBody
+          question={question as FillBlankSanitized}
+          idx={idx}
+          answer={typeof answer === "string" ? answer : ""}
+          feedback={feedback}
+          isLocked={isLocked}
+          onSelect={onSelect}
+        />
+      )}
+      {type === "match_columns" && (
+        <MatchColumnsBody
+          question={question as MatchColumnsSanitized}
+          idx={idx}
+          answer={answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {}}
+          feedback={feedback}
+          isLocked={isLocked}
+          onSelect={onSelect}
+        />
+      )}
 
       {isPractice && feedback && (
         <div className={`mt-3 p-2 rounded-[var(--radius-btn)] font-accent font-bold text-center ${feedback === "correct" ? "bg-green" : "bg-coral text-white"}`}>
@@ -116,3 +138,126 @@ export const QuestionCard = memo(function QuestionCard({
     </div>
   );
 });
+
+interface TypeBodyProps<Q, A> {
+  question: Q;
+  idx: number;
+  answer: A;
+  feedback: "correct" | "wrong" | undefined;
+  isLocked: boolean;
+  onSelect: (idx: number, newAnswer: QuestionAnswer) => void;
+}
+
+function McqSingleBody({ question, idx, answer, feedback, isLocked, onSelect }: TypeBodyProps<McqSingleSanitized, string | undefined>) {
+  return (
+    <div className="space-y-2">
+      {question.options.map((option, optIdx) => {
+        let optionClass = "bg-white border-ink/10 hover:bg-cream-alt";
+        const isSelected = answer === option;
+
+        if (isSelected && feedback === "correct") optionClass = "bg-green border-green text-ink";
+        else if (isSelected && feedback === "wrong") optionClass = "bg-coral border-coral text-white";
+        else if (isSelected) optionClass = "bg-ink text-white border-ink";
+
+        if (feedback === "wrong" && question.answer === option) optionClass = "bg-green border-green border-2";
+
+        return (
+          <label
+            key={optIdx}
+            className={`flex cursor-pointer items-center p-3 rounded-[var(--radius-btn)] border-2 transition-all ${optionClass} ${isLocked ? "cursor-not-allowed opacity-80" : ""}`}
+          >
+            <input
+              type="radio"
+              name={`q-${idx}`}
+              className="hidden"
+              checked={isSelected}
+              onChange={() => onSelect(idx, option)}
+              disabled={isLocked}
+            />
+            <span className="font-mono flex-1">{option}</span>
+            {feedback === "correct" && isSelected && <CheckCircle size={20} />}
+            {feedback === "wrong" && isSelected && <XCircle size={20} />}
+            {feedback === "wrong" && question.answer === option && <CheckCircle size={20} />}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function McqMultiBody({ question, idx, answer, feedback, isLocked, onSelect }: TypeBodyProps<McqMultiSanitized, string[]>) {
+  const toggle = (option: string) => {
+    if (isLocked) return;
+    const next = answer.includes(option) ? answer.filter((o) => o !== option) : [...answer, option];
+    onSelect(idx, next);
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-accent font-bold text-ink/50 uppercase -mt-1 mb-2">Select all that apply</p>
+      {question.options.map((option, optIdx) => {
+        const isSelected = answer.includes(option);
+        const isCorrectOption = question.answers?.includes(option);
+        let optionClass = "bg-white border-ink/10 hover:bg-cream-alt";
+
+        if (feedback && isCorrectOption) optionClass = "bg-green border-green text-ink";
+        else if (feedback === "wrong" && isSelected && !isCorrectOption) optionClass = "bg-coral border-coral text-white";
+        else if (isSelected) optionClass = "bg-ink text-white border-ink";
+
+        return (
+          <label
+            key={optIdx}
+            className={`flex cursor-pointer items-center p-3 rounded-[var(--radius-btn)] border-2 transition-all ${optionClass} ${isLocked ? "cursor-not-allowed opacity-80" : ""}`}
+          >
+            <input type="checkbox" className="hidden" checked={isSelected} onChange={() => toggle(option)} disabled={isLocked} />
+            <span className="font-mono flex-1">{option}</span>
+            {isSelected && <CheckCircle size={18} />}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function FillBlankBody({ question: _question, idx, answer, isLocked, onSelect }: TypeBodyProps<FillBlankSanitized, string>) {
+  return (
+    <input
+      type="text"
+      value={answer}
+      onChange={(e) => onSelect(idx, e.target.value)}
+      disabled={isLocked}
+      placeholder="Type your answer…"
+      className="input-tactile disabled:cursor-not-allowed disabled:opacity-70"
+    />
+  );
+}
+
+function MatchColumnsBody({ question, idx, answer, isLocked, onSelect }: TypeBodyProps<MatchColumnsSanitized, Record<string, string>>) {
+  const setPair = (left: string, right: string) => {
+    if (isLocked) return;
+    onSelect(idx, { ...answer, [left]: right });
+  };
+
+  return (
+    <div className="space-y-2">
+      {question.leftItems.map((left, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <span className="flex-1 p-3 rounded-[var(--radius-btn)] border-2 border-ink/10 bg-white font-mono text-sm">{left}</span>
+          <select
+            value={answer[left] ?? ""}
+            onChange={(e) => setPair(left, e.target.value)}
+            disabled={isLocked}
+            className="input-tactile flex-1 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <option value="">-- Match --</option>
+            {question.rightItems.map((right, j) => (
+              <option key={j} value={right}>
+                {right}
+              </option>
+            ))}
+          </select>
+        </div>
+      ))}
+    </div>
+  );
+}

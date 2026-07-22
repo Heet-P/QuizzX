@@ -1,5 +1,5 @@
 import "server-only";
-import type { QuizQuestion } from "@/types/quiz";
+import type { QuizQuestion, McqSingleQuestion } from "@/types/quiz";
 
 // Ported verbatim from server/src/services/QuizParser.js — parses an
 // uploaded .md/.txt/.docx quiz document into the QuizQuestion[] shape.
@@ -99,7 +99,7 @@ function parseHeadingFormat(content: string): QuizQuestion[] {
 function parseNumberedFormat(content: string): QuizQuestion[] {
   const lines = content.split("\n");
   const questions: QuizQuestion[] = [];
-  let current: QuizQuestion | null = null;
+  let current: McqSingleQuestion | null = null;
 
   lines.forEach((line) => {
     const t = line.trim();
