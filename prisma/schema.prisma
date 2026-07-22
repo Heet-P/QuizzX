@@ -1,0 +1,228 @@
+// Prisma schema for QuizzX_V2, ported from QuizzX's server/migrations/001_initial_schema.sql.
+// `game_sessions` (GameController's table) is intentionally omitted — see MIGRATION_AUDIT.md
+// Section 0.5: the feature was dropped as an orphaned, redundant duplicate of the submissions
+// scoring path with zero frontend caller in the original app.
+//
+// Two partial indexes from the original schema (idx_submissions_completed_score WHERE
+// status='completed', idx_submission_events_quiz_id) are not expressible in the schema DSL
+// today and are added via a hand-written follow-up migration instead — see prisma/migrations.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../lib/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String    @id @default(uuid()) @db.Uuid
+  clerkId     String?   @unique @map("clerk_id") @db.VarChar(255)
+  username    String    @unique @db.VarChar(255)
+  email       String    @unique @db.VarChar(255)
+  userCode    String?   @unique @map("user_code") @db.VarChar(20)
+  role        String    @default("user") @db.VarChar(20)
+  score       Int       @default(0)
+  xp          Int       @default(0)
+  streakCount Int       @default(0) @map("streak_count")
+  lastQuizAt  DateTime? @map("last_quiz_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  createdTeams      Team[]            @relation("TeamCreator")
+  teamMemberships   TeamMember[]
+  createdQuizzes    Quiz[]            @relation("QuizCreator")
+  submissions       Submission[]
+  submissionEvents  SubmissionEvent[]
+  userAchievements  UserAchievement[]
+  quizComments      QuizComment[]
+  hostedRooms       Room[]            @relation("RoomHost")
+  roomParticipation RoomParticipant[]
+
+  @@index([email], map: "idx_users_email")
+  @@index([clerkId], map: "idx_users_clerk")
+  @@map("users")
+}
+
+model Team {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamCode  String   @unique @map("team_code") @db.VarChar(8)
+  name      String   @db.VarChar(100)
+  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  creator        User?           @relation("TeamCreator", fields: [createdBy], references: [id])
+  members        TeamMember[]
+  teamQuizScores TeamQuizScore[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id       String   @id @default(uuid()) @db.Uuid
+  teamId   String   @map("team_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  role     String   @default("member") @db.VarChar(20)
+  joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId], map: "idx_team_members_user_id")
+  @@index([teamId], map: "idx_team_members_team_id")
+  @@map("team_members")
+}
+
+model Quiz {
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String    @db.VarChar(255)
+  description String?
+  questions   Json?
+  settings    Json      @default("{}")
+  isActive    Boolean   @default(false) @map("is_active")
+  status      String    @default("draft") @db.VarChar(20)
+  startedAt   DateTime? @map("started_at") @db.Timestamptz
+  endedAt     DateTime? @map("ended_at") @db.Timestamptz
+  creatorId   String?   @map("creator_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  creator          User?             @relation("QuizCreator", fields: [creatorId], references: [id])
+  submissions      Submission[]
+  submissionEvents SubmissionEvent[]
+  quizComments     QuizComment[]
+  rooms            Room[]
+  teamQuizScores   TeamQuizScore[]
+
+  @@index([status], map: "idx_quizzes_status")
+  @@map("quizzes")
+}
+
+model Submission {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  quizId       String?  @map("quiz_id") @db.Uuid
+  score        Int      @default(0)
+  answers      Json?
+  status       String   @default("completed") @db.VarChar(20)
+  attemptNonce String?  @map("attempt_nonce")
+  tabStrikes   Int      @default(0) @map("tab_strikes")
+  submittedAt  DateTime @default(now()) @map("submitted_at") @db.Timestamptz
+
+  user User? @relation(fields: [userId], references: [id])
+  quiz Quiz?  @relation(fields: [quizId], references: [id])
+
+  @@index([userId, quizId], map: "idx_submissions_user_quiz")
+  @@index([quizId, score(sort: Desc)], map: "idx_submissions_quiz_score")
+  @@map("submissions")
+}
+
+model SubmissionEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  quizId    String?  @map("quiz_id") @db.Uuid
+  eventType String   @map("event_type") @db.VarChar(50)
+  eventData Json?    @map("event_data")
+  ts        DateTime @default(now()) @db.Timestamptz
+
+  user User? @relation(fields: [userId], references: [id])
+  quiz Quiz?  @relation(fields: [quizId], references: [id])
+
+  @@index([quizId, ts], map: "idx_submission_events_quiz")
+  @@index([userId], map: "idx_submission_events_user")
+  @@map("submission_events")
+}
+
+model Achievement {
+  id          String  @id @default(uuid()) @db.Uuid
+  slug        String  @unique @db.VarChar(50)
+  name        String  @db.VarChar(100)
+  description String?
+  icon        String? @db.VarChar(10)
+  xpReward    Int     @default(0) @map("xp_reward")
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  achievement String   @db.VarChar(50)
+  earnedAt    DateTime @default(now()) @map("earned_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievement])
+  @@index([userId], map: "idx_user_achievements_user")
+  @@map("user_achievements")
+}
+
+model QuizComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  quizId    String   @map("quiz_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([quizId], map: "idx_quiz_comments_quiz")
+  @@map("quiz_comments")
+}
+
+model Room {
+  id            String   @id @default(uuid()) @db.Uuid
+  code          String   @unique @db.VarChar(8)
+  quizId        String?  @map("quiz_id") @db.Uuid
+  hostId        String?  @map("host_id") @db.Uuid
+  state         String   @default("waiting") @db.VarChar(20)
+  questionIndex Int      @default(0) @map("question_index")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  quiz         Quiz?             @relation(fields: [quizId], references: [id])
+  host         User?             @relation("RoomHost", fields: [hostId], references: [id])
+  participants RoomParticipant[]
+
+  @@map("rooms")
+}
+
+model RoomParticipant {
+  id       String   @id @default(uuid()) @db.Uuid
+  roomId   String   @map("room_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz
+  score    Int      @default(0)
+  answers  Json     @default("{}")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("room_participants")
+}
+
+model TeamQuizScore {
+  id          String   @id @default(uuid()) @db.Uuid
+  teamId      String   @map("team_id") @db.Uuid
+  quizId      String   @map("quiz_id") @db.Uuid
+  avgScore    Decimal  @default(0) @map("avg_score") @db.Decimal(10, 2)
+  memberCount Int      @default(0) @map("member_count")
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, quizId])
+  @@index([quizId], map: "idx_team_quiz_scores_quiz")
+  @@map("team_quiz_scores")
+}
+
+model AppSetting {
+  key       String   @id @db.VarChar(50)
+  value     Json
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  @@map("app_settings")
+}

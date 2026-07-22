@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+/* QuizzX editorial design system — see design_idea/DesignPhilo.md.
+   Replaces the earlier neo-brutalist token set entirely (full-app redesign). */
+@theme inline {
+  /* Surfaces — warm, aged-paper tone (not flat off-white) */
+  --color-cream: #f2e8d3;
+  --color-cream-alt: #ecdfc2;
+  --color-cream-deep: #e3d3ac;
+  --color-ink: #14120f;
+  --color-white: #ffffff;
+
+  /* Section colors — each section owns one dominant color.
+     Brightened/more saturated per explicit follow-up feedback (previous
+     values read as "pale" next to the units.gr reference). */
+  --color-blue: #2e5bff;
+  --color-blue-deep: #1435c4;
+  --color-yellow: #ffd200;
+  --color-yellow-deep: #e6b800;
+  --color-coral: #ff4b36;
+  --color-coral-deep: #e6341f;
+  --color-orange: #ff9500;
+  --color-orange-deep: #e68500;
+  --color-purple: #8b5cf6;
+  --color-purple-deep: #6d3fd9;
+  --color-green: #22c55e;
+  --color-green-deep: #169447;
+
+  /* Radius — large, soft, physical */
+  --radius-card: 32px;
+  --radius-card-sm: 24px;
+  --radius-btn: 18px;
+  --radius-chip: 999px;
+
+  /* Fonts */
+  --font-display: var(--font-geist-pixel), sans-serif;
+  --font-sans: var(--font-anek-devanagari), sans-serif;
+  --font-accent: var(--font-satoshi), sans-serif;
+
+  /* Editorial display scale */
+  --text-display-2xl: 4.5rem; /* 72px */
+  --text-display-2xl--line-height: 0.98;
+  --text-display-xl: 4rem; /* 64px */
+  --text-display-xl--line-height: 1;
+  --text-display-lg: 3.5rem; /* 56px */
+  --text-display-lg--line-height: 1.02;
+  --text-display-md: 3rem; /* 48px */
+  --text-display-md--line-height: 1.05;
+  --text-display-sm: 2.5rem; /* 40px */
+  --text-display-sm--line-height: 1.08;
+
+  /* Soft, tactile shadows instead of hard neo-brutalist ones */
+  --shadow-tactile: 0 2px 0 0 rgba(20, 18, 15, 0.06), 0 16px 40px -12px rgba(20, 18, 15, 0.18);
+  --shadow-tactile-sm: 0 1px 0 0 rgba(20, 18, 15, 0.06), 0 8px 20px -8px rgba(20, 18, 15, 0.14);
+  --shadow-tactile-lift: 0 24px 60px -16px rgba(20, 18, 15, 0.28);
+
+  /* Marquee (Section 2 of the landing page) */
+  --animate-marquee: marquee 28s linear infinite;
+  /* Terminal-style blinking cursor (top HUD wordmark) */
+  --animate-blink: blink 1s steps(1) infinite;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Medal shimmer — a moving highlight band across a metallic gradient,
+   used for the top-3 leaderboard rows. */
+@keyframes shimmer {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    @apply font-medium tracking-tight;
+  }
+}
+
+@layer components {
+  /* Large rounded, tactile card — the base unit of every section. A bold-
+     but-thin 2px solid ink border (subtle brutalist touch, not a chunky
+     4-8px one) so cards read as crisply outlined against the page. */
+  .card-tactile {
+    @apply bg-cream-alt rounded-[var(--radius-card)] border-2 border-ink shadow-[var(--shadow-tactile)] transition-transform duration-300;
+  }
+
+  .card-tactile:hover {
+    @apply -translate-y-1;
+    box-shadow: var(--shadow-tactile-lift);
+  }
+
+  /* Metallic gradient + shimmer sweep for the top-3 leaderboard rows. */
+  .rank-gold,
+  .rank-silver,
+  .rank-bronze {
+    background-size: 250% 100%;
+    animation: shimmer 3.5s linear infinite;
+  }
+
+  .rank-gold {
+    background-image: linear-gradient(120deg, #f6d365 0%, #e8b923 35%, #fff6d0 50%, #e8b923 65%, #f6d365 100%);
+  }
+
+  .rank-silver {
+    background-image: linear-gradient(120deg, #d7dbe0 0%, #a6acb4 35%, #ffffff 50%, #a6acb4 65%, #d7dbe0 100%);
+  }
+
+  .rank-bronze {
+    background-image: linear-gradient(120deg, #cd8b55 0%, #a3612f 35%, #f4c896 50%, #a3612f 65%, #cd8b55 100%);
+  }
+
+  /* Primary pill/button with a bit of depth and a springy press */
+  .btn-tactile {
+    @apply inline-flex items-center gap-2 rounded-[var(--radius-btn)] px-6 py-3 font-accent font-bold transition-all duration-200;
+    box-shadow: 0 4px 0 0 rgba(20, 18, 15, 0.18);
+  }
+
+  .btn-tactile:hover {
+    @apply -translate-y-0.5;
+    box-shadow: 0 6px 0 0 rgba(20, 18, 15, 0.18);
+  }
+
+  .btn-tactile:active {
+    @apply translate-y-0.5;
+    box-shadow: 0 1px 0 0 rgba(20, 18, 15, 0.18);
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-[var(--radius-chip)] px-4 py-1.5 font-accent text-sm font-bold uppercase tracking-wide;
+  }
+
+  .input-tactile {
+    @apply w-full rounded-[var(--radius-btn)] border-2 border-ink/10 bg-white px-4 py-3 font-sans transition-all focus:outline-none focus:border-ink/30;
+  }
+}
