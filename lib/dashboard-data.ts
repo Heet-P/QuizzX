@@ -20,6 +20,7 @@ export interface DashboardSubmission {
   tabStrikes: number;
   submittedAt: Date;
   quizTitle: string;
+  quizSettings: QuizSettings;
 }
 
 export async function getRecentSubmissions(userId: string): Promise<DashboardSubmission[]> {
@@ -27,7 +28,7 @@ export async function getRecentSubmissions(userId: string): Promise<DashboardSub
     where: { userId },
     orderBy: { submittedAt: "desc" },
     take: 50,
-    include: { quiz: { select: { title: true } } },
+    include: { quiz: { select: { title: true, settings: true } } },
   });
 
   // v1 uses an INNER JOIN to quizzes, so submissions whose quiz no longer
@@ -42,6 +43,7 @@ export async function getRecentSubmissions(userId: string): Promise<DashboardSub
       tabStrikes: r.tabStrikes,
       submittedAt: r.submittedAt,
       quizTitle: r.quiz!.title,
+      quizSettings: r.quiz!.settings as unknown as QuizSettings,
     }));
 }
 

@@ -889,44 +889,89 @@ pages mix both: a Server Component page passing server-fetched props into a
 small Client Component for just the interactive slice (e.g. `/dashboard`'s
 `DraftsSection`, which needs `localStorage`).
 
-### 8.2 API endpoints — none built yet (Phase 3, next up)
+### 8.2 API endpoints — ALL BUILT (2026-07-23)
 
 v1 has these route groups (audit Section 4, full request/response detail
 there): `/quizzes` (7 endpoints), `/admin` (14 endpoints), `/ai` (4
 endpoints), `/leaderboard` (4 endpoints incl. SSE), `/proctor` (2 endpoints),
 `/rooms` (5 endpoints), `/submissions` (5 endpoints, including the ~7-step
 grading transaction with achievement rules), `/teams` (4 endpoints), `/users`
-(8 endpoints). `/game` is explicitly dropped (Section 5.4).
+(8 endpoints). `/game` is explicitly dropped (Section 5.4). **Every one of
+these now exists under `app/api/...`**, dropping the `/api/v1` prefix per
+Section 5.3, verified with `npm run build` (all ~43 routes compile) and a
+runtime smoke test (curled several against a live `next dev` instance — all
+correctly returned 401 unauthenticated rather than crashing).
 
-**Zero of these exist in v2 yet.** No `app/api/` directory at all. Every
-Phase 2 Client Component built in 8.1 above already calls these by their
-final `/api/...` path and expects v1's documented response shape — so Phase 3
-is purely "make the contract real," not a design exercise. When building
-these, remember: drop the `/api/v1` prefix (Section 5.3), reuse
-`types/quiz.ts`'s `normalizeQuizSettings()` rather than re-deriving quiz
-settings defaults/legacy-mode translation again (Section 5.6), and the AI
-routes (`/api/ai/generate-quiz`, `/api/ai/format-quiz`, `/api/ai/distractors`,
-`/api/ai/explain`) can be fully implemented now even without real
-`GROQ_API_KEY`/`NVIDIA_NIM_API_KEY` values — the user will add both later.
+Notable implementation decisions made while building this phase:
+- **Direct Prisma in Route Handlers, not raw `pg`** — every route uses
+  `lib/prisma.ts`, reusing `lib/dashboard-data.ts`/`lib/profile-data.ts`
+  functions where a Phase 2 Server Component already needed the same query
+  (e.g. `/api/users/me/achievements` just calls `getMyAchievements()`).
+- **New shared server-only libs** added for logic the audit flagged as
+  duplicated across 3+ v1 controllers (Section 9's original finding):
+  `lib/answer-matching.ts` (`mapAnswerLetter`/`normalizeAnswer`/`letterOf`/
+  `isAnswerMatch` — used by `/api/submissions`, `/api/rooms/:code/answer`,
+  `/api/admin/quizzes/:id/analytics`, `/api/ai` question remapping),
+  `lib/seeded-shuffle.ts` (`GET /api/quizzes/:id`'s pool/shuffle logic),
+  `lib/csv-response.ts` (shared CSV response builder, used by
+  `/api/leaderboard/export` and `/api/admin/quizzes/:id/integrity`),
+  `lib/team-helpers.ts` (leave/promote/delete-team logic shared across the 3
+  team-mutation routes), `lib/ai-clients.ts` (NIM/Groq OpenAI-compatible
+  clients + the shared `generateQuestions` used by both
+  `/api/ai/generate-quiz` and `/api/admin/daily-challenge`),
+  `lib/quiz-parser.ts` (the `.md`/`.txt` quiz-document parser),
+  `lib/leaderboard-broadcast.ts` (in-process SSE fan-out registry).
+- **Socket.IO's outbound pushes replaced with the SSE broadcast**, not
+  dropped silently: `RoomController.answerQuestion`/`endRoom` used to emit to
+  the leaderboard page's Socket.IO room; `/api/rooms/:code/answer` and
+  `/api/rooms/:code/end` now call `broadcastLeaderboardUpdate()` (the same
+  function `/api/submissions` uses), so any open `/leaderboard` page's SSE
+  connection still gets nudged to refetch when room scores change.
+- **`lib/leaderboard-broadcast.ts` is in-process only** (a `Map`, no Redis
+  pub/sub) — correct for single-instance hosting, but a submission handled
+  by one server instance won't reach an SSE connection held by another
+  instance in a multi-instance/serverless deployment. Flagged in the file's
+  own header comment; revisit with Redis pub/sub if/when this app runs as
+  more than one instance (Redis still isn't provisioned — Section 11).
+- **Two new dependencies installed**: `bcryptjs` (PIN hashing/verification —
+  matches v1's own choice of the pure-JS bcrypt implementation) and
+  `mammoth` + `openai` (docx text extraction; NIM/Groq clients).
+- **Rate limiting was NOT ported** (v1 had `apiLimiter`/`pinLimiter`/
+  `commentLimiter`/`submitLimiter`/`aiLimiter` via `express-rate-limit`) —
+  proper distributed rate limiting needs Redis for correctness across
+  serverless instances, and Redis isn't provisioned yet; an in-memory-only
+  limiter would work for single-instance hosting but wasn't built this pass.
+  Flagged as a real gap, not forgotten.
+- **`/api/admin/quizzes/:id/clone` exists but nothing calls it** — ported for
+  REST parity anyway since v1's own `QuizManager.jsx` never wired up a clone
+  button either (confirmed in the audit) — a pre-existing v1 dead endpoint,
+  not something this port introduced.
 
 The auth-sync logic that v1 ran as middleware before every protected request
 (`authMiddleware.js`: look up by `clerk_id` → fall back to lookup-by-email +
 backfill → else create a new user with a generated username/user_code,
 collision-retried) **has already been ported** — see `lib/auth.ts`'s
-`getCurrentUser()`. This is done and matches the audit's checklist for that
-piece.
+`getCurrentUser()`. New for Phase 3: `lib/api-auth.ts`'s
+`requireApiUser()`/`requireApiAdmin()`/`requireApiTeacherOrAdmin()` are the
+Route Handler equivalent of v1's `authMiddleware`/`adminMiddleware` — called
+at the top of every route instead of centralized middleware (consistent with
+`proxy.ts` staying auth-logic-free, Section 4.2).
 
 ### 8.3 Cross-cutting shared logic — status
 
-- Quiz settings type + normalization: **done** (`types/quiz.ts`), and now
-  actually consumed by `/quiz/:id` (`QuizClient.tsx`) and `/admin`+`/teacher`'s
-  `QuizUploader.tsx`, not just written-and-unused.
-- Answer matching / letter resolution: **not ported** (no
-  `lib/answer-matching.ts` yet) — needed once Phase 3 builds
-  `/api/submissions` (the real grading transaction).
-- Seeded shuffle: **not ported** — needed once Phase 3 builds
+- Quiz settings type + normalization: **done** (`types/quiz.ts`), consumed by
+  `/quiz/:id` (`QuizClient.tsx`), `/admin`+`/teacher`'s `QuizUploader.tsx`,
+  and now also `/api/admin/quizzes/upload`+`/api/admin/quizzes/create`.
+- Answer matching / letter resolution: **done** (`lib/answer-matching.ts`,
+  2026-07-23) — used by `/api/submissions`, `/api/rooms/:code/answer`,
+  `/api/admin/quizzes/:id/analytics`. The Section 5.6 open question (should
+  practice-mode's client-side check use this too?) is still **not decided**
+  — `QuestionCard.tsx` still does the simple `option === q.answer` exact
+  match, unchanged.
+- Seeded shuffle: **done** (`lib/seeded-shuffle.ts`, 2026-07-23) — used by
   `GET /api/quizzes/:id`.
-- CSV export helper: **not built** (no export routes exist yet).
+- CSV export helper: **done** (`lib/csv-response.ts`, 2026-07-23) — used by
+  `/api/leaderboard/export` and `/api/admin/quizzes/:id/integrity`.
 - **New shared modules added while building Phase 2** (2026-07-22):
   - `lib/xp.ts` — `XP_PER_LEVEL`/`getLevel`/`getLevelProgress`, used by both
     `/dashboard` and `/profile`. Fixed real v1 drift: `ProfilePage.jsx` had
@@ -987,16 +1032,19 @@ piece.
   chunk itself still has to download), just shave the connection-setup part
   off it — flagged to the user as a partial fix, not a full one.
 - ~~No application pages exist beyond the landing page and auth.~~ **Fixed
-  2026-07-22** — all 12 application pages built, see Section 8.1. They're
-  UI-complete but functionally inert wherever they need `/api/*` (which is
-  most of them) — that's the next gap, immediately below.
-- **No API routes exist at all.** See Section 8.2 — this is now the single
-  biggest gap. Every Phase 2 page's `/api/*` calls currently 404; nothing
-  end-to-end works yet even though every page renders.
+  2026-07-22** — all 12 application pages built, see Section 8.1.
+- ~~No API routes exist at all.~~ **Fixed 2026-07-23** — all ~43 `/api/*`
+  routes built, see Section 8.2. **The app should now be functionally
+  complete end-to-end** for the first time (dashboard → browse quizzes →
+  take a quiz → submit → results → leaderboard; team create/join; admin/
+  teacher quiz upload+AI-generate+publish; live lobby + presenter) — this
+  has not yet been exercised end-to-end with real data by anyone (no manual
+  QA pass done yet, no automated tests exist — Phase 6 Verification is still
+  "not started"). Treat as "should work," not "confirmed working," until
+  actually clicked through.
 - ~~Database schema has never been migrated to a real database.~~ **Fixed
-  2026-07-22** — see Section 6.2. Migrated + seeded; consumed by `/dashboard`
-  and `/profile` (direct Prisma reads), still unconsumed by anything needing
-  `/api/*` (i.e. most other pages, until Phase 3).
+  2026-07-22** — see Section 6.2. Migrated + seeded; now consumed by both the
+  Server Component pages (`/dashboard`, `/profile`) and every `/api/*` route.
 - ~~No seed data~~ **Fixed 2026-07-22** — see Section 6.2.
 - **Cloudflare R2 setup deliberately deferred** (2026-07-22) — the user has
   no credit card/PayPal/Apple Pay (India, UPI-only), and Cloudflare requires
@@ -1047,6 +1095,13 @@ piece.
   build-passing-but-visually-broken incident, then explicitly revoked again
   — treat "don't use it" as the standing default unless the user says
   otherwise in the moment.)
+- **No rate limiting on any `/api/*` route** — v1 had 5 different limiters
+  (general/PIN/comments/submissions/AI). Not ported (Section 8.2) — needs
+  Redis for correctness across serverless instances, which isn't provisioned.
+- **SSE leaderboard updates only fan out within a single process** —
+  `lib/leaderboard-broadcast.ts` is an in-memory `Map`, not Redis pub/sub
+  (Section 8.2). Fine for single-instance hosting; a submission on one
+  instance won't reach an SSE listener connected to a different instance.
 
 ---
 
@@ -1066,32 +1121,38 @@ The original brief structured the migration as 6 phases:
   plus all 12 application pages — see Section 8.1 for the full per-page
   breakdown. Every page renders and is UI-complete; most are functionally
   inert until Phase 3 builds the `/api/*` routes they call.
-- **Phase 3 — Backend**: **Not started — this is the next thing to work on.**
-  Zero Route Handlers exist. See Section 8.2 for the full endpoint list;
-  every Phase 2 page already calls these by final path/shape, so this phase
-  is implementation against an already-fixed contract, not design.
-- **Phase 4 — Auth**: **Mostly done for the "is anyone signed in" layer**
-  (`lib/auth.ts`, `app/(protected)/layout.tsx`). **Not done**: per-role
-  authorization matrix (admin/teacher gating) matching v1's exact behavior —
-  `AppNav.tsx` has role-conditional nav links (admin: `/live`, `/admin`;
-  teacher or admin: `/teacher`) and `/teacher` itself has a client-side-only
-  role gate (Section 8.1), but nothing server-side actually enforces any of
-  this yet — that's real Phase 3/4 work (route handlers checking `role`).
+- **Phase 3 — Backend**: **DONE (2026-07-23).** All ~43 `/api/*` Route
+  Handlers built across all 9 route groups — see Section 8.2 for the full
+  breakdown, new shared libs, and known gaps (no rate limiting, in-process-only
+  SSE fan-out).
+- **Phase 4 — Auth**: **Mostly done.** The "is anyone signed in" layer
+  (`lib/auth.ts`, `app/(protected)/layout.tsx`) plus every Phase 3 route now
+  calls `lib/api-auth.ts`'s `requireApiUser()`/`requireApiAdmin()`/
+  `requireApiTeacherOrAdmin()` — so server-side role enforcement **is** in
+  place for the API now (this was the main "not done" item as of Phase 2's
+  completion, and it's resolved as a side effect of building Phase 3
+  correctly). `/teacher`'s own page-level role gate is still client-side-only
+  (Section 8.1) — low-stakes since the actual data-fetching routes it calls
+  are now properly gated regardless of what the page itself shows.
 - **Phase 5 — Database/Storage**: **DB migrated + seeded** (Section 6.2,
   done 2026-07-22). **R2 storage: deliberately deferred**, not just
   "not started" — see Section 9 (no payment method available; revisit once
   one exists or an alternative provider is chosen).
-- **Phase 6 — Verification**: **Not started** — can't meaningfully verify
-  parity against `MIGRATION_AUDIT.md`'s checklists until Phase 3 exists to
-  make the now-built Phase 2 pages actually functional. The audit's
-  per-endpoint/per-page checkboxes are all still unchecked.
+- **Phase 6 — Verification**: **Not started — this is the next thing to work
+  on.** The app should now be functionally complete end-to-end for the first
+  time, but nothing has actually been clicked through with real data yet, and
+  `MIGRATION_AUDIT.md`'s per-endpoint/per-page checkboxes are all still
+  unchecked. No automated tests exist either.
 
-**Bottom line for a new agent**: work Phase 3 next (backend Route Handlers)
-— strictly in numerical phase order per standing instruction (see
-`feedback_phase_order_strict` in this agent's cross-session memory). Every
-page already exists and already calls the exact endpoint each Phase 3 route
-needs to implement; the audit (Section 4) has the per-endpoint request/response
-detail.
+**Bottom line for a new agent**: work Phase 6 next (verification) — strictly
+in numerical phase order per standing instruction (see
+`feedback_phase_order_strict` in this agent's cross-session memory). That
+means: get real env values in for Groq/NVIDIA (R2 stays deferred), run
+`prisma db seed`-equivalent test data through the actual flows (sign up →
+upload/AI-generate a quiz → publish → take it → submit → check leaderboard →
+try team/live-lobby), and work through `MIGRATION_AUDIT.md`'s checkboxes
+against what's actually observed, fixing whatever doesn't match rather than
+building anything new.
 
 ---
 
