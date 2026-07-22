@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { SmartCTAButton } from "./SmartCTAButton";
 import { Swords, ArrowRight, Users } from "lucide-react";
 import { Reveal } from "./Reveal";
 
@@ -40,9 +40,9 @@ export function BattleMode() {
             Create a team, share the 6-character code, and every member&apos;s score counts toward
             your team average. No spectators — only competitors.
           </p>
-          <Link href="/register" className="btn-tactile bg-ink text-white text-base">
+          <SmartCTAButton className="btn-tactile bg-ink text-white text-base">
             Build Your Team <ArrowRight size={18} />
-          </Link>
+          </SmartCTAButton>
         </Reveal>
       </div>
     </section>

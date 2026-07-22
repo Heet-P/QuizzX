@@ -22,8 +22,8 @@ export function AuthCTA() {
     return (
       <div className="flex items-center gap-2">
         <UserButton />
-        <Link href="/quizzes" className="btn-tactile bg-yellow text-ink text-sm">
-          <Zap size={16} /> Start a Quiz
+        <Link href="/dashboard" className="btn-tactile bg-yellow text-ink text-sm">
+          <Zap size={16} /> Dashboard
         </Link>
       </div>
     );
@@ -34,7 +34,7 @@ export function AuthCTA() {
       <Link href="/login" className="btn-tactile bg-ink text-white text-sm">
         Sign In
       </Link>
-      <Link href="/register" className="btn-tactile bg-yellow text-ink text-sm">
+      <Link href="/login" className="btn-tactile bg-yellow text-ink text-sm">
         <Zap size={16} /> Get Started
       </Link>
     </div>

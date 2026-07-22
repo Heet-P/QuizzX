@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
 import { LandingNav } from "@/components/LandingNav";
 import { TopHUD } from "@/components/landing/TopHUD";
 import { SidebarNav } from "@/components/landing/SidebarNav";
@@ -28,9 +26,6 @@ import { SiteFooter } from "@/components/landing/SiteFooter";
 // full-screen overlay — which needs none of that coordination, so the page
 // is back to a single-width column instead of a sidebar-reserved grid.
 export default async function LandingPage() {
-  const { userId } = await auth();
-  if (userId) redirect("/dashboard");
-
   return (
     <div className="min-h-screen bg-cream font-sans text-ink">
       <LandingNav />

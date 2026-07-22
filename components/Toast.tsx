@@ -1,23 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, createContext, useContext, useRef, type ReactNode } from "react";
-import {
-  CheckCircle,
-  AlertCircle,
-  Info,
-  X,
-  Trophy,
-  Target,
-  Percent,
-  Flame,
-  CalendarCheck,
-  Lock,
-  Gauge,
-  Medal,
-  Crown,
-  Award,
-  type LucideIcon,
-} from "lucide-react";
+import { CheckCircle, AlertCircle, Info, X, Trophy, Award } from "lucide-react";
+import { ACHIEVEMENT_ICONS, ACHIEVEMENT_LABELS } from "@/lib/achievements";
 
 // Ported from client/src/components/Toast.jsx.
 
@@ -41,28 +26,6 @@ interface ToastApi {
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
-
-const ACHIEVEMENT_ICONS: Record<string, LucideIcon> = {
-  first_quiz: Target,
-  perfect_score: Percent,
-  streak_3: Flame,
-  streak_7: CalendarCheck,
-  lockdown_clean: Lock,
-  speed_demon: Gauge,
-  top_3: Medal,
-  team_champion: Crown,
-};
-
-const ACHIEVEMENT_LABELS: Record<string, string> = {
-  first_quiz: "First Quiz Complete!",
-  perfect_score: "Perfect Score!",
-  streak_3: "3-Day Streak!",
-  streak_7: "7-Day Streak!",
-  lockdown_clean: "Lockdown Clean",
-  speed_demon: "Speed Demon",
-  top_3: "Top 3 Finish!",
-  team_champion: "Team Champion!",
-};
 
 function ToastItem({ toast, onClose }: { toast: ToastItemData; onClose: (id: number) => void }) {
   const [exiting, setExiting] = useState(false);

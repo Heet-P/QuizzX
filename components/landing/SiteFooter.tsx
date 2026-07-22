@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, PartyPopper } from "lucide-react";
+import { SmartCTAButton } from "./SmartCTAButton";
 
 const SQUARES = [
   { top: "10%", left: "8%", bg: "bg-blue" },
@@ -82,9 +83,9 @@ export function SiteFooter() {
             <p className="font-accent font-bold text-white mb-3">Product</p>
             <ul className="space-y-2">
               <li>
-                <Link href="/register" className="hover:text-white transition-colors">
+                <SmartCTAButton className="hover:text-white transition-colors">
                   Get Started
-                </Link>
+                </SmartCTAButton>
               </li>
               <li>
                 <a href="#features" className="hover:text-white transition-colors">

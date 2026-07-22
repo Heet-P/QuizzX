@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { SmartCTAButton } from "./SmartCTAButton";
 import { motion } from "framer-motion";
 import { ArrowRight, Trophy, Zap, ShieldCheck, Users, Sparkles, Check } from "lucide-react";
 
@@ -32,9 +32,9 @@ export function MosaicHero() {
           <p className="font-sans font-medium text-sm text-ink mb-4">
             Battle friends, climb the leaderboard, and let AI build your next quiz in seconds.
           </p>
-          <Link href="/register" className="btn-tactile bg-ink text-white w-fit">
+          <SmartCTAButton className="btn-tactile bg-ink text-white w-fit">
             Start Playing <ArrowRight size={18} />
-          </Link>
+          </SmartCTAButton>
         </div>
       </motion.div>
 

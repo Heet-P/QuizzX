@@ -577,22 +577,48 @@ Field-level things worth knowing:
   `001_initial_schema.sql`); v2's schema includes them from the start
   instead of relying on an app-boot patch.
 
-### 6.2 Migration status — schema never pushed to a real database yet
+### 6.2 Migration status — DONE (2026-07-22)
 
-**Critical fact, verified directly against the filesystem:** `prisma/migrations/`
-**does not exist**. `npx prisma migrate dev` (or `db push`) has never been run
-against any database, real or otherwise. The schema is fully written and
-should be correct, but it is **unverified against an actual Postgres instance**.
+**Update, 2026-07-22**: the first migration has been run against the real
+Neon instance. `prisma/migrations/` now has two migrations:
+- `20260722162259_init` — generated straight from `schema.prisma` (13 tables).
+- `20260722162409_partial_indexes_and_seed` — hand-written (created via
+  `prisma migrate dev --create-only`, then edited), adds the two partial/
+  composite indexes the schema DSL can't express
+  (`idx_submissions_completed_score WHERE status='completed'`,
+  `idx_submission_events_quiz_id`) plus seed data: 3 `app_settings` rows
+  (`leaderboard_visible=true`, `current_season="Spring 2026"`,
+  `season_start="2026-01-01"`) and all 7 `achievements` catalogue rows
+  (`first_quiz`, `perfect_score`, `streak_3`, `streak_7`, `lockdown_clean`,
+  `speed_demon`, `top_3`) — all copied verbatim from v1's
+  `server/migrations/001_initial_schema.sql`. Verified directly against the
+  live DB (row counts + index names queried via the Prisma client) — see git
+  history for the exact migration SQL.
 
-`.env.local` does have real (non-placeholder) values populated for both
-`DATABASE_URL` and `DIRECT_URL` — meaning a real Neon project has been
-provisioned and its connection strings supplied — but that database has never
-actually had the schema applied to it. **Before any application code that
-touches the database can be tested, someone needs to run the first migration**
-and also hand-write the two partial-index follow-up migration mentioned in
-6.1, plus seed data: `app_settings` rows (`leaderboard_visible`,
-`current_season`, `season_start`) and the 7 `achievements` catalogue rows
-(audit Section 5 checklist item) — none of this seeding exists yet either.
+**Gotcha hit and fixed**: the first attempt at the seed migration failed
+shadow-DB validation (`P3006`/`23502`, `null value in column "id"`) because
+`Achievement.id`'s `@default(uuid())` in `schema.prisma` is a **Prisma
+Client-side default only** — it does **not** produce a DB-level `DEFAULT` in
+the generated DDL (confirmed by reading the generated `CREATE TABLE
+"achievements"` — no default on the `id UUID NOT NULL` column). Raw SQL
+`INSERT`s (as used in hand-written migrations) must supply an explicit
+`gen_random_uuid()` for any UUID-PK model instead of relying on Prisma to
+fill it in — this applies to every model, not just `Achievement`, if anyone
+writes a future hand-written data migration.
+
+**Note on the achievement `icon` column**: the seeded values are literal
+emoji (`🎯`, `💯`, `🔥`, etc.), copied verbatim from v1 for data fidelity.
+This does **not** conflict with the project's "never render emoji in the UI"
+rule (Section 13 item 9) — that rule is about UI rendering choices, not
+stored data; whichever component eventually displays achievements should map
+`slug`/`icon` to a Lucide icon rather than rendering this column directly.
+
+**Still not done**: nothing has consumed this schema yet (no API routes, no
+pages read/write these tables) — the DB is now correctly provisioned and
+seeded, but otherwise untouched by application code. `npx prisma generate`
+was not re-run as part of this (schema.prisma itself didn't change, only
+migrations were added) — the existing `lib/generated/prisma` output is still
+current.
 
 ---
 
@@ -828,8 +854,8 @@ v1 had 15 page components (audit Section 2). Status in v2:
 |---|---|
 | `/` (landing) | **Yes** — extensively iterated, see Section 7 |
 | `/login`, `/register` | **Yes** — Clerk catch-all routes exist |
-| `/dashboard` | No |
-| `/quizzes` | No |
+| `/dashboard` | **Yes** (2026-07-22) — Server Component, reads Prisma directly (see `lib/dashboard-data.ts`) rather than calling a self `/api/*` route, since all 6 v1 endpoints it needed were pure initial-render reads with no client interactivity riding on them. Achievement grid intentionally renders from the real DB catalogue (7 rows) rather than v1's hardcoded client-side `ACHIEVEMENT_DEFS` array, which had drifted to include two keys (`quiz_10`, `speedster`) that don't exist in the seeded catalogue — a v1 bug, not preserved. Verified against live DB with a throwaway script (all queries execute cleanly against a fresh/empty account) |
+| `/quizzes` | **Yes** (2026-07-22) — Client Component, ported 1:1 including the 15s poll + `visibilitychange` pause. **Depends on `GET /api/quizzes` (Phase 3, not built yet)** — this page is written against the exact response shape `QuizController.listQuizzes` returned in v1, so it'll work the moment that route exists; until then it 404s and shows an empty list. This is the general pattern for any Phase 2 page needing ongoing client-side interactivity (polling/mutations) — build against the documented v1 contract now, Phase 3 fulfills it later |
 | `/quiz/:id` | No — this is the most complex single piece of v1 frontend logic (audit Section 8, ~770 lines, 15 `useState`s); budget real time for it |
 | `/quiz/:id/results` | No |
 | `/leaderboard` | No — also needs the new SSE hook (Section 5.1) |
@@ -881,12 +907,21 @@ piece.
 - **No application pages exist beyond the landing page and auth.** This is
   the single biggest gap — see Section 8.1.
 - **No API routes exist at all.** See Section 8.2.
-- **Database schema has never been migrated to a real database.** See
-  Section 6.2 — `prisma/migrations/` doesn't exist. Nothing that touches the
-  DB has been runtime-tested against real data.
-- **No seed data** — `app_settings` defaults and the 7 `achievements`
-  catalogue rows don't exist anywhere yet (need to be created as part of the
-  first migration).
+- ~~Database schema has never been migrated to a real database.~~ **Fixed
+  2026-07-22** — see Section 6.2. Migrated + seeded, but still unconsumed by
+  any application code.
+- ~~No seed data~~ **Fixed 2026-07-22** — see Section 6.2.
+- **Cloudflare R2 setup deliberately deferred** (2026-07-22) — the user has
+  no credit card/PayPal/Apple Pay (India, UPI-only), and Cloudflare requires
+  a payment method on file even for R2's free tier. Decision: skip storage
+  entirely for now rather than force a workaround, since per Section 5.2 it's
+  a **new capability**, not something replacing existing migrated
+  functionality — nothing else is blocked by its absence. Revisit later via
+  either (a) a UPI-funded virtual Visa/Mastercard (Niyo Global, Scapia,
+  Jupiter, etc. — issued against Indian bank accounts, usable for Cloudflare
+  billing verification), or (b) a card-free storage alternative (e.g.
+  Supabase Storage) if picked instead of R2 — no storage code has been
+  written yet either way, so the provider choice is still fully open.
 - **`AuthCTA.tsx`'s signed-in branch is currently unreachable** — `app/page.tsx`
   redirects any signed-in `userId` to `/dashboard` (which doesn't exist yet
   either, so this redirect would currently 404) before the landing page ever
@@ -935,11 +970,15 @@ The original brief structured the migration as 6 phases:
   per Section 5.5 Stage B — the *scaffolding mechanism* for tokens is done,
   the *specific tokens* have moved on from what Phase 1 originally produced).
   **Not done**: actual `prisma migrate` run (Section 6.2).
-- **Phase 2 — Frontend**: **Partially done, landing-page-only.** The landing
-  page is fully built and heavily iterated (Section 7). **None of the 12
-  application pages exist** (dashboard, quizzes, quiz-taking, results,
-  leaderboard, team, profile, admin, teacher, proctor, live-lobby, presenter)
-  — see Section 8.1.
+- **Phase 2 — Frontend**: **In progress.** Landing page fully built (Section
+  7). Of the 12 application pages: `/dashboard` and `/quizzes` are done
+  (2026-07-22, see Section 8.1 for details on each). **10 remain**: quiz-taking
+  (the big one — state machine, ~770 lines in v1), results, leaderboard, team,
+  admin, teacher, proctor, profile, live-lobby (2 routes), presenter.
+  Working strictly in that phase order per explicit user instruction
+  (2026-07-22) — not skipping to Phase 3 (Backend) even though pages like
+  `/quizzes` need it to actually run; see `feedback_phase_order_strict` in
+  this agent's cross-session memory for why.
 - **Phase 3 — Backend**: **Not started.** Zero Route Handlers exist. See
   Section 8.2 for the full endpoint list to build.
 - **Phase 4 — Auth**: **Mostly done for the "is anyone signed in" layer**
@@ -948,8 +987,10 @@ The original brief structured the migration as 6 phases:
   `AppNav.tsx` has role-conditional nav links built already
   (`isAdmin`-gated `/live`/`/admin` links) but there's no actual `/admin` or
   `/teacher` page yet to enforce anything on.
-- **Phase 5 — Database/Storage**: **Schema written, not migrated** (Section
-  6.2). **R2 storage: not started** (Section 5.2, 9).
+- **Phase 5 — Database/Storage**: **DB migrated + seeded** (Section 6.2,
+  done 2026-07-22). **R2 storage: deliberately deferred**, not just
+  "not started" — see Section 9 (no payment method available; revisit once
+  one exists or an alternative provider is chosen).
 - **Phase 6 — Verification**: **Not started** — can't meaningfully verify
   parity against `MIGRATION_AUDIT.md`'s checklists until Phases 2–5 are
   substantially further along. The audit's per-endpoint/per-page checkboxes
@@ -1149,12 +1190,15 @@ giant one.
 Things flagged during development that were never explicitly resolved —
 don't silently pick an answer, ask or flag again if they become relevant:
 
-1. **Should `app/page.tsx` stop redirecting signed-in users to `/dashboard`?**
-   `AuthCTA.tsx`'s logged-in UI (real avatar via `UserButton`, "Start a
-   Quiz" link) is built correctly but currently unreachable because of this
-   redirect (Section 7.1 point 14, Section 9). Also somewhat moot until
-   `/dashboard` actually exists (Section 8.1) — redirecting there today would
-   404.
+1. ~~Should `app/page.tsx` stop redirecting signed-in users to `/dashboard`?~~
+   **Resolved by the user, 2026-07-22** (manual edit, reviewed and committed
+   as-is): the redirect was removed entirely — signed-in users now still see
+   the landing page. `AuthCTA.tsx`'s logged-in branch is reachable now.
+   Landing CTAs that used to hardcode `/register` (`MosaicHero`, `BattleMode`,
+   `SiteFooter`, `LandingNav`) were switched to a new shared
+   `components/landing/SmartCTAButton.tsx`, which routes to `/dashboard` if
+   signed in or `/login` otherwise — so the same buttons make sense for both
+   audiences instead of always pushing toward registration.
 2. **Practice-mode answer-checking consistency** (carried over from the
    original audit, Section 5.6): should the client-side practice-mode
    correctness check use the same `mapAnswerLetter`-equivalent matching

@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
+import { SmartCTAButton } from "@/components/landing/SmartCTAButton";
 
 // Extracted from the landing page's inline nav — needs useState for the
 // mobile menu toggle, so it's split into its own Client Component while the
 // rest of the landing page stays a Server Component.
 export function LandingNav() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { isSignedIn } = useUser();
 
   return (
     <nav className="lg:hidden sticky top-4 z-50 mx-4 sm:mx-6 rounded-[28px] bg-white/90 backdrop-blur-md border border-ink/5 shadow-[var(--shadow-tactile-sm)] px-5 sm:px-6 py-3">
@@ -30,12 +33,14 @@ export function LandingNav() {
           <button className="md:hidden btn-tactile bg-cream-alt p-2 text-sm" onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <Link href="/login" className="btn-tactile bg-blue text-white text-sm hidden sm:inline-flex">
-            Sign In
-          </Link>
-          <Link href="/register" className="btn-tactile bg-yellow text-sm">
-            Get Started
-          </Link>
+          {!isSignedIn && (
+            <Link href="/login" className="btn-tactile bg-blue text-white text-sm hidden sm:inline-flex">
+              Sign In
+            </Link>
+          )}
+          <SmartCTAButton className="btn-tactile bg-yellow text-sm">
+            {isSignedIn ? "Dashboard" : "Get Started"}
+          </SmartCTAButton>
         </div>
       </div>
 
@@ -47,9 +52,15 @@ export function LandingNav() {
           <a href="#faq" onClick={() => setMenuOpen(false)} className="chip bg-transparent normal-case justify-start">
             FAQ
           </a>
-          <Link href="/login" onClick={() => setMenuOpen(false)} className="chip bg-blue text-white normal-case justify-start">
-            Sign In
-          </Link>
+          {isSignedIn ? (
+            <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="chip bg-yellow normal-case justify-start">
+              Dashboard
+            </Link>
+          ) : (
+            <Link href="/login" onClick={() => setMenuOpen(false)} className="chip bg-blue text-white normal-case justify-start">
+              Sign In
+            </Link>
+          )}
         </div>
       )}
     </nav>
