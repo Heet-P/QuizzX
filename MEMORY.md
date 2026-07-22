@@ -846,32 +846,50 @@ This is a summary for orientation. **For exact route paths, request/response
 shapes, and old-code line references, read `../MIGRATION_AUDIT.md` directly**
 — it has per-endpoint checkboxes already.
 
-### 8.1 Pages/routes — 1 of 15 built (landing only)
+### 8.1 Pages/routes — ALL BUILT (2026-07-22)
 
-v1 had 15 page components (audit Section 2). Status in v2:
+**Every application page now exists.** This was the single biggest gap in
+the project as of this morning (0 of 12 non-landing/auth pages); all 12 were
+built in one session, in strict numerical phase order per explicit user
+instruction (see `feedback_phase_order_strict` in this agent's cross-session
+memory — always work the lowest-numbered incomplete phase next).
 
 | Route | Built in v2? |
 |---|---|
 | `/` (landing) | **Yes** — extensively iterated, see Section 7 |
 | `/login`, `/register` | **Yes** — Clerk catch-all routes exist |
-| `/dashboard` | **Yes** (2026-07-22) — Server Component, reads Prisma directly (see `lib/dashboard-data.ts`) rather than calling a self `/api/*` route, since all 6 v1 endpoints it needed were pure initial-render reads with no client interactivity riding on them. Achievement grid intentionally renders from the real DB catalogue (7 rows) rather than v1's hardcoded client-side `ACHIEVEMENT_DEFS` array, which had drifted to include two keys (`quiz_10`, `speedster`) that don't exist in the seeded catalogue — a v1 bug, not preserved. Verified against live DB with a throwaway script (all queries execute cleanly against a fresh/empty account) |
-| `/quizzes` | **Yes** (2026-07-22) — Client Component, ported 1:1 including the 15s poll + `visibilitychange` pause. **Depends on `GET /api/quizzes` (Phase 3, not built yet)** — this page is written against the exact response shape `QuizController.listQuizzes` returned in v1, so it'll work the moment that route exists; until then it 404s and shows an empty list. This is the general pattern for any Phase 2 page needing ongoing client-side interactivity (polling/mutations) — build against the documented v1 contract now, Phase 3 fulfills it later |
-| `/quiz/:id` | No — this is the most complex single piece of v1 frontend logic (audit Section 8, ~770 lines, 15 `useState`s); budget real time for it |
-| `/quiz/:id/results` | No |
-| `/leaderboard` | No — also needs the new SSE hook (Section 5.1) |
-| `/team` | No |
-| `/admin` | No |
-| `/admin/proctor/:quizId` | No |
-| `/teacher` | No |
-| `/profile` | No |
-| `/live`, `/live/:code` | No |
-| `/live/:code/display` | No |
+| `/dashboard` | **Yes** — `app/(protected)/dashboard/page.tsx`, Server Component reading Prisma directly via `lib/dashboard-data.ts`. Achievement grid renders from the real DB catalogue (7 rows) rather than v1's hardcoded client-side `ACHIEVEMENT_DEFS` array, which had drifted to reference two keys (`quiz_10`, `speedster`) not in the seeded catalogue — a v1 bug, not preserved. |
+| `/quizzes` | **Yes** — `app/(protected)/quizzes/page.tsx`, Client Component, 15s poll + `visibilitychange` pause ported 1:1. |
+| `/quiz/:id` | **Yes** — `app/(protected)/quiz/[id]/page.tsx` (thin Server shell) + `components/quiz/QuizClient.tsx` (the full ~770-line v1 state machine) + `hooks/useQuizCheating.ts` + `components/quiz/{AntiCopy,QuizTimer,QuestionCard,RulesScreen,PinGateModal,WatermarkOverlay}.tsx`. Uses `types/quiz.ts`'s `normalizeQuizSettings()` instead of re-deriving the legacy-`mode` translation a third time. Added a real "already completed" screen — v1's 403-completed response left `showRules`/`submitted` in a state that fell through every branch to a confusing empty-quiz render (0 questions, a "Submit Final Answers" button) rather than crashing; not a deliberate v1 screen, so not reproduced. |
+| `/quiz/:id/results` | **Yes** — `app/(protected)/quiz/[id]/results/page.tsx` + `components/quiz/ResultsClient.tsx`. v1 passed result data via React Router `location.state`; Next.js has no equivalent, so `QuizClient` stashes the same payload in `sessionStorage` (`quiz_result_${id}`) and this page reads that first, falling back to URL params (for shared-link opens) exactly like v1's own fallback. |
+| `/leaderboard` | **Yes** — `app/(protected)/leaderboard/page.tsx` + `components/leaderboard/LeaderboardClient.tsx` + `hooks/useLeaderboardStream.ts` (replaces Socket.IO per Section 5.1). Real finding while building this: v1's SSE broadcast (`lb.broadcast(quizId, {type:'new_submission', quizId, score})`) only ever sent a lightweight ping, never the full rankings array — unlike the Socket.IO `leaderboard:update` event it was meant to parallel. So the hook only signals "something changed"; the page's existing REST fetch re-runs on that signal. This also **removes** v1's "SSE data only applies for individual+global mode" caveat entirely, since every filter combination now just refetches via REST. |
+| `/team` | **Yes** — `app/(protected)/team/page.tsx`. |
+| `/admin` | **Yes** — `app/(protected)/admin/page.tsx` + `components/admin/{QuizManager,QuizUploader,DailyChallengePanel}.tsx` (all three shared with `/teacher`). `QuizUploader`'s AI-generate tab is fully implemented (calls `/api/ai/generate-quiz`) per explicit user instruction to build AI features now even though `GROQ_API_KEY`/`NVIDIA_NIM_API_KEY` aren't configured yet (user will add both "at the very end"; R2 likewise deferred, see Section 9/15). |
+| `/admin/proctor/:quizId` | **Yes** — `app/(protected)/admin/proctor/[quizId]/page.tsx` + `components/admin/ProctorClient.tsx`. Same-origin simplification: v1 needed a `?token=` query-param workaround because its `EventSource` call was cross-origin (separate Vite frontend); this app is same-origin so the Clerk session cookie rides along automatically — no token plumbing needed. |
+| `/teacher` | **Yes** — `app/(protected)/teacher/page.tsx`, reuses `QuizUploader`/`DailyChallengePanel`. Client-side-only role gate ("Access Denied" unless `role` is `teacher`/`admin`) ported as-is — v1's own real gap (no server-side enforcement) isn't fixed here, that belongs in Phase 3's route handlers. Added a "Teacher" link to `AppNav` (visible for `teacher`/`admin`) since it was missing entirely — the audit documents `/teacher` as a real route but v1's own `Layout.jsx` nav never linked to it either. |
+| `/profile` | **Yes** — `app/(protected)/profile/page.tsx`, Server Component using `lib/profile-data.ts` (new: `getStreakCalendar`, `getMyTeam`) plus `getRecentSubmissions`/`getMyAchievements` reused from `lib/dashboard-data.ts`. Unifies on `lib/xp.ts`'s 200-XP/level formula rather than v1's own separate `XP_PER_LEVEL=100` constant on this specific page — that was real v1 drift (Dashboard used 200 on the same account), not an intentional per-page difference. |
+| `/live`, `/live/:code` | **Yes** — `app/(protected)/live/page.tsx` (create-lobby form, its own route now rather than a no-`code` branch of one component) + `app/(protected)/live/[code]/page.tsx` + `components/live/LiveLobbyClient.tsx` (host/participant views). |
+| `/live/:code/display` | **Yes** — `app/(presenter)/live/[code]/display/page.tsx` + `components/live/PresenterClient.tsx`, in a **new route group** `app/(presenter)/` with its own `layout.tsx` (auth-gated, but deliberately no `AppNav`/padding — this view needs to fill an entire projector/TV screen, which the normal `(protected)` shell can't do). Route groups don't affect URL structure, so `(presenter)/live/[code]/display` and `(protected)/live/[code]` coexist fine as siblings under the same `/live/...` URL space. |
 
-`app/(protected)/layout.tsx` (the auth-gate shell + `AppNav`) exists and is
-ready to wrap all of the above once their `page.tsx` files are created —
-this is genuine, tested-in-principle scaffolding, not a stub.
+`app/(protected)/layout.tsx` (the auth-gate shell + `AppNav`) wraps all of the
+above as originally scaffolded — no changes needed there beyond adding the
+Teacher nav link mentioned above.
 
-### 8.2 API endpoints — none built yet
+**Architectural pattern used throughout, worth knowing before touching any of
+these pages**: pages needing only read-only *initial-render* data (dashboard,
+profile) are Server Components calling Prisma directly via small `lib/*-data.ts`
+helper modules — **not** self-fetches to `/api/*`, since Next.js Server
+Components can query the DB directly and a same-process HTTP round-trip would
+be pure overhead. Pages needing genuine client-side interactivity (polling,
+mutations, form submits, SSE) are Client Components calling `/api/*` routes
+that **don't exist yet** (Phase 3) — those calls are written against the exact
+response shapes `MIGRATION_AUDIT.md` documents for each v1 endpoint, so they
+activate with zero changes once Phase 3 implements the matching route. Several
+pages mix both: a Server Component page passing server-fetched props into a
+small Client Component for just the interactive slice (e.g. `/dashboard`'s
+`DraftsSection`, which needs `localStorage`).
+
+### 8.2 API endpoints — none built yet (Phase 3, next up)
 
 v1 has these route groups (audit Section 4, full request/response detail
 there): `/quizzes` (7 endpoints), `/admin` (14 endpoints), `/ai` (4
@@ -880,10 +898,16 @@ endpoints), `/leaderboard` (4 endpoints incl. SSE), `/proctor` (2 endpoints),
 grading transaction with achievement rules), `/teams` (4 endpoints), `/users`
 (8 endpoints). `/game` is explicitly dropped (Section 5.4).
 
-**Zero of these exist in v2 yet.** No `app/api/` directory at all. When
-building these, remember: drop the `/api/v1` prefix (Section 5.3), and reuse
+**Zero of these exist in v2 yet.** No `app/api/` directory at all. Every
+Phase 2 Client Component built in 8.1 above already calls these by their
+final `/api/...` path and expects v1's documented response shape — so Phase 3
+is purely "make the contract real," not a design exercise. When building
+these, remember: drop the `/api/v1` prefix (Section 5.3), reuse
 `types/quiz.ts`'s `normalizeQuizSettings()` rather than re-deriving quiz
-settings defaults/legacy-mode translation again (Section 5.6).
+settings defaults/legacy-mode translation again (Section 5.6), and the AI
+routes (`/api/ai/generate-quiz`, `/api/ai/format-quiz`, `/api/ai/distractors`,
+`/api/ai/explain`) can be fully implemented now even without real
+`GROQ_API_KEY`/`NVIDIA_NIM_API_KEY` values — the user will add both later.
 
 The auth-sync logic that v1 ran as middleware before every protected request
 (`authMiddleware.js`: look up by `clerk_id` → fall back to lookup-by-email +
@@ -894,22 +918,47 @@ piece.
 
 ### 8.3 Cross-cutting shared logic — status
 
-- Quiz settings type + normalization: **done** (`types/quiz.ts`).
+- Quiz settings type + normalization: **done** (`types/quiz.ts`), and now
+  actually consumed by `/quiz/:id` (`QuizClient.tsx`) and `/admin`+`/teacher`'s
+  `QuizUploader.tsx`, not just written-and-unused.
 - Answer matching / letter resolution: **not ported** (no
-  `lib/answer-matching.ts` yet).
-- Seeded shuffle: **not ported**.
+  `lib/answer-matching.ts` yet) — needed once Phase 3 builds
+  `/api/submissions` (the real grading transaction).
+- Seeded shuffle: **not ported** — needed once Phase 3 builds
+  `GET /api/quizzes/:id`.
 - CSV export helper: **not built** (no export routes exist yet).
+- **New shared modules added while building Phase 2** (2026-07-22):
+  - `lib/xp.ts` — `XP_PER_LEVEL`/`getLevel`/`getLevelProgress`, used by both
+    `/dashboard` and `/profile`. Fixed real v1 drift: `ProfilePage.jsx` had
+    its own separate `XP_PER_LEVEL=100` while `DashboardPage.jsx` used 200 —
+    same user's level would render differently on the two pages. Unified on
+    200 (Dashboard's value) rather than preserving the inconsistency.
+  - `lib/achievements.ts` — `ACHIEVEMENT_ICONS`/`ACHIEVEMENT_LABELS` (slug →
+    Lucide icon/label), extracted from what used to be private to
+    `Toast.tsx`; now also used by `/dashboard` and `/profile`'s achievement
+    grids. Values unchanged, just relocated so a third use site doesn't
+    duplicate the map.
+  - `lib/dashboard-data.ts` — `getRecentSubmissions`, `getMyAchievements`,
+    `getWeakTopics`, `getFeaturedQuiz`, `getDailyQuizForUser`. Used by both
+    `/dashboard` and (the first two) `/profile`.
+  - `lib/profile-data.ts` — `getStreakCalendar`, `getMyTeam`, used by
+    `/profile` only so far.
 
 ---
 
 ## 9. Known Issues / Things Actively NOT Working
 
-- **No application pages exist beyond the landing page and auth.** This is
-  the single biggest gap — see Section 8.1.
-- **No API routes exist at all.** See Section 8.2.
+- ~~No application pages exist beyond the landing page and auth.~~ **Fixed
+  2026-07-22** — all 12 application pages built, see Section 8.1. They're
+  UI-complete but functionally inert wherever they need `/api/*` (which is
+  most of them) — that's the next gap, immediately below.
+- **No API routes exist at all.** See Section 8.2 — this is now the single
+  biggest gap. Every Phase 2 page's `/api/*` calls currently 404; nothing
+  end-to-end works yet even though every page renders.
 - ~~Database schema has never been migrated to a real database.~~ **Fixed
-  2026-07-22** — see Section 6.2. Migrated + seeded, but still unconsumed by
-  any application code.
+  2026-07-22** — see Section 6.2. Migrated + seeded; consumed by `/dashboard`
+  and `/profile` (direct Prisma reads), still unconsumed by anything needing
+  `/api/*` (i.e. most other pages, until Phase 3).
 - ~~No seed data~~ **Fixed 2026-07-22** — see Section 6.2.
 - **Cloudflare R2 setup deliberately deferred** (2026-07-22) — the user has
   no credit card/PayPal/Apple Pay (India, UPI-only), and Cloudflare requires
@@ -922,10 +971,11 @@ piece.
   billing verification), or (b) a card-free storage alternative (e.g.
   Supabase Storage) if picked instead of R2 — no storage code has been
   written yet either way, so the provider choice is still fully open.
-- **`AuthCTA.tsx`'s signed-in branch is currently unreachable** — `app/page.tsx`
-  redirects any signed-in `userId` to `/dashboard` (which doesn't exist yet
-  either, so this redirect would currently 404) before the landing page ever
-  renders for a logged-in user. Flagged to the user, not resolved (Section 15).
+- ~~`AuthCTA.tsx`'s signed-in branch is currently unreachable~~ **Resolved
+  2026-07-22** — see Section 15 item 1. The user removed `app/page.tsx`'s
+  signed-in redirect entirely (manual edit, reviewed); `AuthCTA`'s logged-in
+  branch is reachable now, and landing CTAs route through the new
+  `SmartCTAButton` instead of hardcoding `/register`.
 - **Two dead font families still downloaded**: `clash-display-*.woff2` and
   `general-sans-*.woff2` sit in `app/fonts/` and are declared in `lib/fonts.ts`
   but no CSS token references them anymore since the Geist Pixel/Anek
@@ -945,9 +995,13 @@ piece.
   files. v1 had some (`k6` load tests, a gated Playwright spec, a gated
   Supertest spec) but none were ever wired into CI even there, and none have
   been ported.
-- **Nothing is committed to git except the original scaffold** — see Section
-  14. Do not assume any git history reflects the current state; the working
-  tree is authoritative.
+- ~~Nothing is committed to git except the original scaffold~~ **Partially
+  fixed 2026-07-22** — see Section 14. A second commit now covers the DB
+  migration, `/dashboard`+`/quizzes`, and the user's manual auth/design
+  fixes. The remaining 10 Phase 2 pages built later in the same session
+  (quiz-taking through presenter view) are **not committed yet** — confirm
+  with the user before committing further rather than assuming continued
+  work should be auto-committed.
 - **The user has explicitly said not to use Playwright/headless-browser
   tooling for self-initiated UI verification** (memory: `feedback_no_playwright_visual_checks`)
   — default to `npm run build` + code review; the user does their own manual
@@ -970,37 +1024,36 @@ The original brief structured the migration as 6 phases:
   per Section 5.5 Stage B — the *scaffolding mechanism* for tokens is done,
   the *specific tokens* have moved on from what Phase 1 originally produced).
   **Not done**: actual `prisma migrate` run (Section 6.2).
-- **Phase 2 — Frontend**: **In progress.** Landing page fully built (Section
-  7). Of the 12 application pages: `/dashboard` and `/quizzes` are done
-  (2026-07-22, see Section 8.1 for details on each). **10 remain**: quiz-taking
-  (the big one — state machine, ~770 lines in v1), results, leaderboard, team,
-  admin, teacher, proctor, profile, live-lobby (2 routes), presenter.
-  Working strictly in that phase order per explicit user instruction
-  (2026-07-22) — not skipping to Phase 3 (Backend) even though pages like
-  `/quizzes` need it to actually run; see `feedback_phase_order_strict` in
-  this agent's cross-session memory for why.
-- **Phase 3 — Backend**: **Not started.** Zero Route Handlers exist. See
-  Section 8.2 for the full endpoint list to build.
+- **Phase 2 — Frontend**: **DONE (2026-07-22).** Landing page (Section 7)
+  plus all 12 application pages — see Section 8.1 for the full per-page
+  breakdown. Every page renders and is UI-complete; most are functionally
+  inert until Phase 3 builds the `/api/*` routes they call.
+- **Phase 3 — Backend**: **Not started — this is the next thing to work on.**
+  Zero Route Handlers exist. See Section 8.2 for the full endpoint list;
+  every Phase 2 page already calls these by final path/shape, so this phase
+  is implementation against an already-fixed contract, not design.
 - **Phase 4 — Auth**: **Mostly done for the "is anyone signed in" layer**
   (`lib/auth.ts`, `app/(protected)/layout.tsx`). **Not done**: per-role
   authorization matrix (admin/teacher gating) matching v1's exact behavior —
-  `AppNav.tsx` has role-conditional nav links built already
-  (`isAdmin`-gated `/live`/`/admin` links) but there's no actual `/admin` or
-  `/teacher` page yet to enforce anything on.
+  `AppNav.tsx` has role-conditional nav links (admin: `/live`, `/admin`;
+  teacher or admin: `/teacher`) and `/teacher` itself has a client-side-only
+  role gate (Section 8.1), but nothing server-side actually enforces any of
+  this yet — that's real Phase 3/4 work (route handlers checking `role`).
 - **Phase 5 — Database/Storage**: **DB migrated + seeded** (Section 6.2,
   done 2026-07-22). **R2 storage: deliberately deferred**, not just
   "not started" — see Section 9 (no payment method available; revisit once
   one exists or an alternative provider is chosen).
 - **Phase 6 — Verification**: **Not started** — can't meaningfully verify
-  parity against `MIGRATION_AUDIT.md`'s checklists until Phases 2–5 are
-  substantially further along. The audit's per-endpoint/per-page checkboxes
-  are all still unchecked.
+  parity against `MIGRATION_AUDIT.md`'s checklists until Phase 3 exists to
+  make the now-built Phase 2 pages actually functional. The audit's
+  per-endpoint/per-page checkboxes are all still unchecked.
 
-**Bottom line for a new agent**: if asked "what should I work on next" with
-no other context, the honest answer is Phase 3 (backend endpoints) and Phase
-2 (the 12 missing app pages) are where all the actual product-feature work
-remains — the landing page, while extensively polished, is marketing surface
-area, not the app itself.
+**Bottom line for a new agent**: work Phase 3 next (backend Route Handlers)
+— strictly in numerical phase order per standing instruction (see
+`feedback_phase_order_strict` in this agent's cross-session memory). Every
+page already exists and already calls the exact endpoint each Phase 3 route
+needs to implement; the audit (Section 4) has the per-endpoint request/response
+detail.
 
 ---
 
@@ -1150,38 +1203,31 @@ Collected in one place since they're each individually easy to hit again:
 
 ## 14. Git / Version Control Status
 
-**Critical, easy to miss**: `git log` shows exactly **one commit** —
-`d1af297 "Initial commit from Create Next App"`. Every single change
-described in this entire file — the full landing page, the design system
-swap, the auth wiring, the Prisma schema, all of it — is currently
-**uncommitted working-tree state**. `git status --short` shows the working
-tree has substantial modifications and many untracked new files/directories
-(`.agents/`, `.claude/`, `.env.local.example`, `answer_icreate.md`,
-`app/(protected)/`, `app/fonts/`, `app/login/`, `app/register/`, and more).
+**Updated 2026-07-22 — two commits now, not one:**
+- `ba107ab "Migrated to NextJS"` — everything through the original scaffold,
+  Clerk auth, Prisma schema (unmigrated at the time), and the full landing
+  page redesign (Sections 3–7 of this file). This is the commit that made
+  the rest of this file's history "real" — before it, none of that work was
+  in git at all (the state the paragraph below used to describe).
+- A second commit (2026-07-22, same day) covering: the first Prisma
+  migration + seed data (Section 6.2), `/dashboard` + `/quizzes`
+  (Section 8.1), and the user's own manual fixes to `lib/auth.ts`/`AppNav.tsx`/
+  landing CTAs (Section 15 item 1). Commit message deliberately has no
+  AI co-author trailer — explicit user instruction for this project, not a
+  default to assume elsewhere.
 
-Also notable in `git status`: `package.json`/`package-lock.json` show
-uncommitted changes that **predate any work in this file's history** — it
-looks like several real dependencies (Clerk, Prisma, framer-motion, etc.)
-were installed at some point but `package.json` itself was never
-re-committed to reflect them until an unrelated `npm install` incidentally
-triggered npm to reconcile it. This diff has been left alone (not part of
-any single feature's scope) but is worth committing along with everything
-else.
+**Still uncommitted as of this writing**: the other 10 Phase 2 pages built
+later in the same 2026-07-22 session (quiz-taking, results, leaderboard,
+team, admin, proctor, teacher, profile, live-lobby, presenter — everything
+in Section 8.1 not mentioned in the second commit above). Confirm with the
+user before committing further rather than assuming every subsequent chunk
+of work should be auto-committed — this project's standing behavior so far
+has been "commit when asked," not "commit continuously."
 
-The default template's placeholder SVGs (`public/file.svg`, `globe.svg`,
-`next.svg`, `vercel.svg`, `window.svg`) were deleted at some point (shown as
-`D` in git status) — intentional cleanup, not an accident.
-
-**Implication for a new agent**: don't assume `git log`/`git blame` tell you
-anything useful about *when* or *why* a piece of this project was built —
-almost the entire history lives only in this MEMORY.md and in prior
-conversation context, not in git. If you're asked to commit, the user has
-not yet done so themselves despite extensive work existing — confirm scope
-with them (staging everything at once vs. splitting into logical commits)
-rather than assuming a single big commit is wanted, since a project this
-size might warrant being broken into a few logical commits (e.g., scaffold +
-auth + schema as one, landing page redesign as another) rather than one
-giant one.
+**Implication for a new agent**: `git log`/`git blame` are now meaningful for
+everything in the two commits above, but still tell you nothing about the
+uncommitted work in progress — this MEMORY.md remains the authoritative
+record for that until it's committed.
 
 ---
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useClerk } from "@clerk/nextjs";
-import { LogOut, User, Trophy, BookOpen, Shield, Menu, X, Users, LayoutDashboard, Radio } from "lucide-react";
+import { LogOut, User, Trophy, BookOpen, Shield, Menu, X, Users, LayoutDashboard, Radio, GraduationCap } from "lucide-react";
 
 // Ported from client/src/components/Layout.jsx, restyled to the editorial
 // design system (design_idea/DesignPhilo.md). Role/username are resolved
@@ -16,6 +16,7 @@ export function AppNav({ role, username }: { role: string; username: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const isAdmin = role === "admin";
+  const isTeacher = role === "teacher" || isAdmin;
 
   const handleLogout = async () => {
     await signOut();
@@ -30,6 +31,7 @@ export function AppNav({ role, username }: { role: string; username: string }) {
     { href: "/quizzes", label: "Quizzes", icon: BookOpen, activeBg: "bg-cream text-ink font-bold shadow-[0_0_12px_rgba(242,232,211,0.3)]" },
     { href: "/leaderboard", label: "Leaderboard", icon: Trophy, activeBg: "bg-yellow text-ink font-bold shadow-[0_0_12px_rgba(255,210,0,0.4)]" },
     { href: "/team", label: "Team", icon: Users, activeBg: "bg-blue text-white font-bold shadow-[0_0_12px_rgba(46,91,255,0.4)]" },
+    ...(isTeacher ? [{ href: "/teacher", label: "Teacher", icon: GraduationCap, activeBg: "bg-orange text-white font-bold shadow-[0_0_12px_rgba(255,149,0,0.4)]" }] : []),
     ...(isAdmin ? [{ href: "/live", label: "Live", icon: Radio, activeBg: "bg-coral text-white font-bold shadow-[0_0_12px_rgba(255,75,54,0.4)]" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", icon: Shield, activeBg: "bg-purple text-white font-bold shadow-[0_0_12px_rgba(139,92,246,0.4)]" }] : []),
   ];
