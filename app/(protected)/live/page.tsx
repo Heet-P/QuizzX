@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Users } from "lucide-react";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 
 interface QuizOption {
   id: string;
@@ -21,8 +22,7 @@ export default function CreateLobbyPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/quizzes")
-      .then((res) => res.json())
+    apiFetch<QuizOption[]>("/api/admin/quizzes")
       .then((data) => setQuizzes(Array.isArray(data) ? data : []))
       .catch(() => setQuizzes([]))
       .finally(() => setLoading(false));
@@ -33,18 +33,16 @@ export default function CreateLobbyPage() {
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch("/api/rooms", {
+      const data = await apiFetch<{ code?: string; room_code?: string; room?: { code?: string } }>("/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quiz_id: selectedQuiz }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create lobby");
       const code = data?.code || data?.room_code || data?.room?.code;
       if (code) router.push(`/live/${code}`);
       else setError("Room created but no code returned.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create lobby");
+      setError(errorMessage(err, "Failed to create lobby"));
     } finally {
       setCreating(false);
     }

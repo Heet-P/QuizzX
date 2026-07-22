@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Shield, Download, Wifi, WifiOff, AlertTriangle, RefreshCw, Loader } from "lucide-react";
+import { apiFetch, ApiError } from "@/lib/api-client";
 
 interface LogEvent {
   _id?: string | number;
@@ -87,9 +88,8 @@ export function ProctorClient({ quizId }: { quizId: string }) {
   useEffect(() => {
     const fetchTitle = async () => {
       try {
-        const res = await fetch("/api/leaderboard/quizzes");
-        const quizzes = await res.json();
-        const match = (Array.isArray(quizzes) ? quizzes : []).find((q: { id: string }) => String(q.id) === String(quizId));
+        const quizzes = await apiFetch<{ id: string; title: string }[]>("/api/leaderboard/quizzes");
+        const match = (Array.isArray(quizzes) ? quizzes : []).find((q) => String(q.id) === String(quizId));
         setQuizTitle(match?.title || `Quiz #${quizId}`);
       } catch {
         setQuizTitle(`Quiz #${quizId}`);
@@ -100,16 +100,15 @@ export function ProctorClient({ quizId }: { quizId: string }) {
 
   const fetchSummary = useCallback(async () => {
     try {
-      const res = await fetch(`/api/proctor/${quizId}/summary`);
-      if (res.status === 403) {
-        setError("You do not have access to the proctor dashboard.");
-        return;
-      }
-      const data = await res.json();
+      const data = await apiFetch<SummaryRowData[] | { summary: SummaryRowData[] }>(`/api/proctor/${quizId}/summary`);
       const rows: SummaryRowData[] = Array.isArray(data) ? data : (data.summary ?? []);
       rows.sort((a, b) => (b.tab_switches || 0) - (a.tab_switches || 0));
       setSummary(rows);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setError("You do not have access to the proctor dashboard.");
+        return;
+      }
       // keep prior summary on transient failure
     } finally {
       setSummaryLoading(false);

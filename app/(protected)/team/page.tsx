@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Users, Copy, CheckCircle, AlertCircle, Plus, LogIn, Crown, User, LogOut, Info } from "lucide-react";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 
 interface TeamMember {
   user_id: string;
@@ -39,8 +40,7 @@ export default function TeamPage() {
   useEffect(() => {
     const fetchTeam = async () => {
       try {
-        const res = await fetch("/api/teams/mine");
-        const data = await res.json();
+        const data = await apiFetch<{ team: Team | null }>("/api/teams/mine");
         setTeam(data.team ?? null);
       } catch {
         // team stays null; page falls back to create/join forms
@@ -61,18 +61,16 @@ export default function TeamPage() {
     if (!teamName.trim()) return;
     setCreating(true);
     try {
-      const res = await fetch("/api/teams", {
+      const data = await apiFetch<{ team: Team }>("/api/teams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: teamName.trim() }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create team");
       setTeam(data.team);
       showMessage("success", `Team "${data.team.name}" created! Share the code: ${data.team.team_code}`);
       setTeamName("");
     } catch (err) {
-      showMessage("error", err instanceof Error ? err.message : "Failed to create team");
+      showMessage("error", errorMessage(err, "Failed to create team"));
     } finally {
       setCreating(false);
     }
@@ -83,18 +81,16 @@ export default function TeamPage() {
     if (!joinCode.trim()) return;
     setJoining(true);
     try {
-      const res = await fetch("/api/teams/join", {
+      const data = await apiFetch<{ team: Team }>("/api/teams/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ teamCode: joinCode.trim().toUpperCase() }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to join team");
       setTeam(data.team);
       showMessage("success", `Joined team "${data.team.name}" successfully!`);
       setJoinCode("");
     } catch (err) {
-      showMessage("error", err instanceof Error ? err.message : "Failed to join team");
+      showMessage("error", errorMessage(err, "Failed to join team"));
     } finally {
       setJoining(false);
     }
@@ -117,15 +113,11 @@ export default function TeamPage() {
         setLeaveConfirm(null);
         setLeaving(true);
         try {
-          const res = await fetch("/api/teams/mine", { method: "DELETE" });
-          if (!res.ok) {
-            const data = await res.json().catch(() => null);
-            throw new Error(data?.error || "Failed to leave team");
-          }
+          await apiFetch("/api/teams/mine", { method: "DELETE" });
           setTeam(null);
           showMessage("success", "You have left the team.");
         } catch (err) {
-          showMessage("error", err instanceof Error ? err.message : "Failed to leave team");
+          showMessage("error", errorMessage(err, "Failed to leave team"));
         } finally {
           setLeaving(false);
         }

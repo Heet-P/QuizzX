@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
-import { Trophy, Download, Users, User, ChevronDown, Medal, Crown, Award, Globe, School, Lock, Flag, RefreshCw } from "lucide-react";
+import { Trophy, Download, Users, User, ChevronDown, Medal, Crown, Award, Lock, Flag, RefreshCw, MousePointerClick } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLeaderboardStream } from "@/hooks/useLeaderboardStream";
+import { apiFetch, apiFetchBlob } from "@/lib/api-client";
 import type { QuizSettings } from "@/types/quiz";
 
 interface QuizOption {
@@ -37,19 +38,26 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="w-6 text-center font-accent font-bold text-sm">{rank}</span>;
 }
 
-// Ported from client/src/pages/LeaderboardPage.jsx. Live updates now come
-// from useLeaderboardStream (SSE) rather than Socket.IO — see that hook's
-// header comment for why the consumer-facing shape is simpler here (no more
-// per-mode "is the live channel applicable" branching). `/api/leaderboard*`
-// routes are Phase 3 work, not built yet.
+// Ported from client/src/pages/LeaderboardPage.jsx, with two deliberate
+// changes from v1 (both explicit user decisions, 2026-07-22):
+// 1. Dropped the Global/Campus scope toggle entirely — this app has no
+//    college/university integration, so "Campus" scope never had real data
+//    behind it. Every request is implicitly global now (no scope param sent).
+// 2. No longer auto-selects the first live quiz on load — the user must
+//    explicitly pick one from the dropdown before any leaderboard content
+//    renders (an `initialQuizId` passed in via URL, e.g. from the results
+//    page's "View Leaderboard" link, still pre-selects one).
+// Live updates come from useLeaderboardStream (SSE) rather than Socket.IO —
+// see that hook's header comment. `/api/leaderboard*` routes are Phase 3
+// work, not built yet.
 export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | null }) {
   const { user: clerkUser } = useUser();
   const [rows, setRows] = useState<(IndividualRow | TeamRow)[]>([]);
   const [mode, setMode] = useState<"individual" | "team">("individual");
-  const [scope, setScope] = useState<"global" | "campus">("global");
   const [quizId, setQuizId] = useState<string | null>(initialQuizId);
   const [quizzes, setQuizzes] = useState<QuizOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [quizzesLoading, setQuizzesLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [hiddenOwnUser, setHiddenOwnUser] = useState<{ score?: number } | null>(null);
   const [archived, setArchived] = useState(false);
@@ -60,43 +68,36 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
   useEffect(() => {
     const fetchQuizzes = async () => {
       try {
-        const res = await fetch("/api/leaderboard/quizzes");
-        const data: QuizOption[] = await res.json();
+        const data = await apiFetch<QuizOption[]>("/api/leaderboard/quizzes");
         setQuizzes(data);
-        if (data.length > 0 && !quizId) {
-          const firstLive = data.find((q) => q.status === "live");
-          if (firstLive) {
-            setQuizId(firstLive.id);
-            setQuizMode(firstLive.settings?.quiz_mode === "team" ? "team" : "individual");
-            setMode(firstLive.settings?.quiz_mode === "team" ? "team" : "individual");
-          }
+        if (initialQuizId) {
+          const preselected = data.find((q) => q.id === initialQuizId);
+          if (preselected) setQuizMode(preselected.settings?.quiz_mode === "team" ? "team" : "individual");
         }
       } catch {
-        // leave quizzes empty; page shows "no quiz available"
+        // leave quizzes empty; dropdown shows nothing to pick
+      } finally {
+        setQuizzesLoading(false);
       }
     };
     fetchQuizzes();
+    // initialQuizId is only meant to seed the initial selection, not re-run this fetch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchLeaderboard = useCallback(async () => {
-    if (!quizId) {
-      setLoading(false);
-      return;
-    }
+    if (!quizId) return;
+    setLoading(true);
     try {
-      const params = new URLSearchParams({ quizId, mode, scope });
-      const res = await fetch(`/api/leaderboard?${params.toString()}`);
-      const data = await res.json();
+      const params = new URLSearchParams({ quizId, mode });
+      const data = await apiFetch<{
+        hidden?: boolean;
+        archived?: boolean;
+        ownUser?: { score?: number };
+        rows?: (IndividualRow | TeamRow)[];
+      }>(`/api/leaderboard?${params.toString()}`);
 
-      if (res.status === 403) {
-        if (data.archived) setArchived(true);
-        else if (data.hidden) {
-          setHidden(true);
-          setHiddenOwnUser(data.ownUser ?? null);
-        }
-        setRows([]);
-      } else if (data.hidden) {
+      if (data.hidden) {
         setHidden(true);
         setHiddenOwnUser(data.ownUser ?? null);
         setRows([]);
@@ -113,15 +114,14 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
     } finally {
       setLoading(false);
     }
-  }, [quizId, mode, scope]);
+  }, [quizId, mode]);
 
   useEffect(() => {
-    setLoading(true);
     fetchLeaderboard();
   }, [fetchLeaderboard, lastUpdateAt]);
 
   const handleQuizChange = (newQuizId: string) => {
-    setQuizId(newQuizId);
+    setQuizId(newQuizId || null);
     const quiz = quizzes.find((q) => q.id === newQuizId);
     if (quiz) {
       const newQuizMode = quiz.settings?.quiz_mode === "team" ? "team" : "individual";
@@ -131,12 +131,10 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
   };
 
   const handleExport = async () => {
+    if (!quizId) return;
     try {
-      const params = new URLSearchParams();
-      if (quizId) params.set("quizId", quizId);
-      params.set("mode", mode);
-      const res = await fetch(`/api/leaderboard/export?${params.toString()}`);
-      const blob = await res.blob();
+      const params = new URLSearchParams({ quizId, mode });
+      const blob = await apiFetchBlob(`/api/leaderboard/export?${params.toString()}`);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -160,7 +158,11 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
           <Trophy size={36} className="text-yellow" />
           Leaderboard
         </h1>
-        <button onClick={handleExport} className="btn-tactile bg-ink text-white text-sm self-start sm:self-auto">
+        <button
+          onClick={handleExport}
+          disabled={!quizId}
+          className="btn-tactile bg-ink text-white text-sm self-start sm:self-auto disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <Download size={16} /> Export CSV
         </button>
       </div>
@@ -182,7 +184,7 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
           <ChevronDown size={18} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink/40" />
         </div>
 
-        {quizMode === "team" && (
+        {quizId && quizMode === "team" && (
           <div className="flex rounded-[var(--radius-btn)] border-2 border-ink/10 overflow-hidden">
             <button
               onClick={() => setMode("individual")}
@@ -202,36 +204,29 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
             </button>
           </div>
         )}
-
-        <div className="flex rounded-[var(--radius-btn)] border-2 border-ink/10 overflow-hidden">
-          <button
-            onClick={() => setScope("global")}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-accent font-bold transition-all ${
-              scope === "global" ? "bg-ink text-white" : "bg-white hover:bg-cream-alt"
-            }`}
-          >
-            <Globe size={16} /> Global
-          </button>
-          <button
-            onClick={() => setScope("campus")}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-accent font-bold border-l-2 border-ink/10 transition-all ${
-              scope === "campus" ? "bg-purple text-white" : "bg-white hover:bg-cream-alt"
-            }`}
-          >
-            <School size={16} /> Campus
-          </button>
-        </div>
       </div>
 
-      {loading ? (
+      {quizzesLoading ? (
         <div className="flex min-h-[40vh] items-center justify-center">
-          <div className="text-xl font-display animate-pulse">Loading scores…</div>
+          <div className="text-xl font-display animate-pulse">Loading quizzes…</div>
         </div>
       ) : !quizId ? (
-        <div className="card-tactile bg-yellow text-center py-12">
-          <Trophy size={48} className="mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-display">No quiz available</p>
-          <p className="text-sm font-accent font-bold text-ink/60 mt-1">Wait for the admin to publish a quiz.</p>
+        quizzes.length === 0 ? (
+          <div className="card-tactile bg-yellow text-center py-12">
+            <Trophy size={48} className="mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-display">No quiz available</p>
+            <p className="text-sm font-accent font-bold text-ink/60 mt-1">Wait for the admin to publish a quiz.</p>
+          </div>
+        ) : (
+          <div className="card-tactile text-center py-12">
+            <MousePointerClick size={48} className="mx-auto mb-4 opacity-40" />
+            <p className="text-lg font-display">Select a quiz above</p>
+            <p className="text-sm font-accent font-bold text-ink/50 mt-1">Its leaderboard will show up here.</p>
+          </div>
+        )
+      ) : loading ? (
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <div className="text-xl font-display animate-pulse">Loading scores…</div>
         </div>
       ) : hidden ? (
         <div className="card-tactile bg-yellow text-center py-12">

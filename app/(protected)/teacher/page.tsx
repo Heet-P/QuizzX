@@ -6,6 +6,7 @@ import { QuizUploader } from "@/components/admin/QuizUploader";
 import { DailyChallengePanel } from "@/components/admin/DailyChallengePanel";
 import { useToast } from "@/components/Toast";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 import type { QuizSettings } from "@/types/quiz";
 
 interface TeacherQuiz {
@@ -81,12 +82,10 @@ function AnalyticsModal({ quiz, onClose }: { quiz: TeacherQuiz; onClose: () => v
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/admin/quizzes/${quiz.id}/analytics`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Failed to load analytics");
+        const data = await apiFetch<QuizAnalyticsData>(`/api/admin/quizzes/${quiz.id}/analytics`);
         setAnalyticsData(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load analytics");
+        setError(errorMessage(err, "Failed to load analytics"));
       } finally {
         setLoading(false);
       }
@@ -170,8 +169,7 @@ export default function TeacherPage() {
 
   const fetchQuizzes = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/quizzes");
-      const data = await res.json();
+      const data = await apiFetch<TeacherQuiz[]>("/api/admin/quizzes");
       setQuizzes(Array.isArray(data) ? data : []);
     } catch {
       // leave quizzes empty
@@ -183,8 +181,7 @@ export default function TeacherPage() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch("/api/users/profile");
-        const data = await res.json();
+        const data = await apiFetch<{ role: string }>("/api/users/profile");
         setProfile(data);
       } catch {
         // profile stays null; access-denied branch below handles it
@@ -198,12 +195,11 @@ export default function TeacherPage() {
 
   const handlePublish = async (quizId: string) => {
     try {
-      const res = await fetch(`/api/admin/quizzes/${quizId}/publish`, { method: "POST" });
-      if (!res.ok) throw new Error();
+      await apiFetch(`/api/admin/quizzes/${quizId}/publish`, { method: "POST" });
       fetchQuizzes();
       toast.success("Quiz is now live!");
-    } catch {
-      toast.error("Failed to publish quiz");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to publish quiz"));
     }
   };
 
@@ -214,12 +210,11 @@ export default function TeacherPage() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const res = await fetch(`/api/admin/quizzes/${quizId}/archive`, { method: "POST" });
-          if (!res.ok) throw new Error();
+          await apiFetch(`/api/admin/quizzes/${quizId}/archive`, { method: "POST" });
           fetchQuizzes();
           toast.success("Quiz archived.");
-        } catch {
-          toast.error("Failed to archive quiz");
+        } catch (err) {
+          toast.error(errorMessage(err, "Failed to archive quiz"));
         }
       },
     });

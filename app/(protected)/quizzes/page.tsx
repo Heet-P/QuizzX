@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Clock, CheckCircle, Lock, RefreshCw, Users, User, LogIn, Radio } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
 import type { QuizSettings } from "@/types/quiz";
 
 // Ported from client/src/pages/QuizListPage.jsx. Polls GET /api/quizzes every
@@ -38,11 +39,8 @@ export default function QuizzesPage() {
 
   const fetchQuizzes = useCallback(async () => {
     try {
-      const res = await fetch("/api/quizzes");
-      if (res.ok) {
-        const data = await res.json();
-        setQuizzes(Array.isArray(data) ? data : (data.quizzes ?? []));
-      }
+      const data = await apiFetch<QuizListItem[] | { quizzes?: QuizListItem[] }>("/api/quizzes");
+      setQuizzes(Array.isArray(data) ? data : (data.quizzes ?? []));
     } catch {
       // Silently retry on next poll tick, matching v1 (only logs non-401 errors).
     } finally {

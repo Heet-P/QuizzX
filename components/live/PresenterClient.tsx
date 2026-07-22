@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { apiFetch } from "@/lib/api-client";
 
 interface RoomQuestion {
   question?: string;
@@ -59,9 +60,8 @@ export function PresenterClient({ code }: { code: string }) {
 
   const fetchRoom = useCallback(async () => {
     try {
-      const res = await fetch(`/api/rooms/${code}`);
-      const data = await res.json();
-      const roomData: Room = data?.room ?? data;
+      const data = await apiFetch<{ room?: Room } | Room>(`/api/rooms/${code}`);
+      const roomData: Room = (data as { room?: Room }).room ?? (data as Room);
       setRoom(roomData);
 
       if (lastQuestionIndexRef.current !== roomData.question_index) {

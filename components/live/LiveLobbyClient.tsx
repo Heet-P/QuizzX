@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { Users, Play, ChevronRight, StopCircle, Copy, CheckCircle, Loader, Monitor } from "lucide-react";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { apiFetch, ApiError, errorMessage } from "@/lib/api-client";
 
 interface RoomQuestion {
   question?: string;
@@ -230,15 +231,14 @@ export function LiveLobbyClient({ code }: { code: string }) {
 
   const fetchRoom = useCallback(async () => {
     try {
-      const res = await fetch(`/api/rooms/${code}`);
-      if (res.status === 404) {
+      const data = await apiFetch<{ room?: Room } | Room>(`/api/rooms/${code}`);
+      setRoom((data as { room?: Room }).room ?? (data as Room));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
         setError("Room not found.");
         return;
       }
-      const data = await res.json();
-      setRoom(data?.room ?? data);
-    } catch {
-      // keep prior room on transient failure
+      // keep prior room on other transient failures
     } finally {
       setLoading(false);
     }
@@ -247,7 +247,7 @@ export function LiveLobbyClient({ code }: { code: string }) {
   useEffect(() => {
     fetchRoom();
     // Auto-join so answers can be submitted (idempotent on the server).
-    fetch(`/api/rooms/${code}/join`, { method: "POST" }).catch(() => {});
+    apiFetch(`/api/rooms/${code}/join`, { method: "POST" }).catch(() => {});
     pollRef.current = setInterval(fetchRoom, 3000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -261,16 +261,14 @@ export function LiveLobbyClient({ code }: { code: string }) {
     setAdvancing(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/rooms/${code}/advance`, {
+      await apiFetch(`/api/rooms/${code}/advance`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question_index: 0, state: "active" }),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Failed to start");
       fetchRoom();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to start");
+      setActionError(errorMessage(err, "Failed to start"));
     } finally {
       setAdvancing(false);
     }
@@ -280,12 +278,10 @@ export function LiveLobbyClient({ code }: { code: string }) {
     setAdvancing(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/rooms/${code}/advance`, { method: "PATCH" });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Failed to advance");
+      await apiFetch(`/api/rooms/${code}/advance`, { method: "PATCH" });
       fetchRoom();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to advance");
+      setActionError(errorMessage(err, "Failed to advance"));
     } finally {
       setAdvancing(false);
     }
@@ -295,12 +291,10 @@ export function LiveLobbyClient({ code }: { code: string }) {
     setEnding(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/rooms/${code}/end`, { method: "POST" });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Failed to end lobby");
+      await apiFetch(`/api/rooms/${code}/end`, { method: "POST" });
       fetchRoom();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to end lobby");
+      setActionError(errorMessage(err, "Failed to end lobby"));
     } finally {
       setEnding(false);
     }
@@ -310,7 +304,7 @@ export function LiveLobbyClient({ code }: { code: string }) {
     const idx = room?.question_index ?? 0;
     setSelectedAnswers((prev) => ({ ...prev, [idx]: answer }));
     try {
-      await fetch(`/api/rooms/${code}/answer`, {
+      await apiFetch(`/api/rooms/${code}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question_index: idx, answer }),

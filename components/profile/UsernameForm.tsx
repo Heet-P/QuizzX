@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle, AlertCircle, Copy } from "lucide-react";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 
 // Ported from the username-edit portion of client/src/pages/ProfilePage.jsx.
 // `/api/users/profile` PUT is Phase 3 work, not built yet.
@@ -21,17 +22,15 @@ export function UsernameForm({ username, userCode, email }: { username: string; 
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/users/profile", {
+      const data = await apiFetch<{ user: { username: string } }>("/api/users/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: newUsername }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update username");
       setNewUsername(data.user.username);
       showMessage("success", "Username updated successfully!");
     } catch (err) {
-      showMessage("error", err instanceof Error ? err.message : "Failed to update username");
+      showMessage("error", errorMessage(err, "Failed to update username"));
     } finally {
       setSaving(false);
     }

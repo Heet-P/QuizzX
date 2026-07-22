@@ -6,6 +6,7 @@ import { QuizManager, type ManagedQuiz } from "@/components/admin/QuizManager";
 import { QuizUploader } from "@/components/admin/QuizUploader";
 import { DailyChallengePanel } from "@/components/admin/DailyChallengePanel";
 import { useToast } from "@/components/Toast";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 
 // Ported from client/src/pages/AdminPage.jsx. `/api/admin/*` are Phase 3 work,
 // not built yet.
@@ -18,8 +19,7 @@ export default function AdminPage() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch("/api/admin/settings");
-      const data = await res.json();
+      const data = await apiFetch<{ leaderboard_visible?: boolean }>("/api/admin/settings");
       setLeaderboardVisible(data.leaderboard_visible !== false);
     } catch {
       // keep default (visible)
@@ -28,8 +28,7 @@ export default function AdminPage() {
 
   const fetchQuizzes = async () => {
     try {
-      const res = await fetch("/api/admin/quizzes");
-      const data = await res.json();
+      const data = await apiFetch<ManagedQuiz[]>("/api/admin/quizzes");
       setQuizzes(data);
     } catch {
       // leave quizzes empty
@@ -47,30 +46,30 @@ export default function AdminPage() {
     const formData = new FormData();
     formData.append("answerFile", answerKeyFile);
     try {
-      const res = await fetch(`/api/admin/quizzes/${selectedQuizForKey}/answer-key`, { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to upload answer key");
+      const data = await apiFetch<{ message?: string }>(`/api/admin/quizzes/${selectedQuizForKey}/answer-key`, {
+        method: "POST",
+        body: formData,
+      });
       toast.success(data.message || "Answer key mapped successfully");
       setAnswerKeyFile(null);
       setSelectedQuizForKey("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to upload answer key");
+      toast.error(errorMessage(err, "Failed to upload answer key"));
     }
   };
 
   const toggleLeaderboard = async () => {
+    const newValue = !leaderboardVisible;
     try {
-      const newValue = !leaderboardVisible;
-      const res = await fetch("/api/admin/settings", {
+      await apiFetch("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "leaderboard_visible", value: newValue }),
       });
-      if (!res.ok) throw new Error();
       setLeaderboardVisible(newValue);
       toast.success(`Leaderboard ${newValue ? "shown" : "hidden"} for users`);
-    } catch {
-      toast.error("Failed to toggle leaderboard");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to toggle leaderboard"));
     }
   };
 
@@ -100,34 +99,32 @@ export default function AdminPage() {
 
       <QuizManager quizzes={quizzes} fetchQuizzes={fetchQuizzes} />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="card-tactile bg-yellow p-6 sm:p-8">
-          <h2 className="mb-6 flex items-center gap-2 text-xl font-display">
-            <Key /> Upload Answer Key
-          </h2>
-          <p className="mb-4 text-sm font-mono bg-white rounded-[var(--radius-btn)] p-3">
-            Format: <strong>Q1: D</strong> or <strong>1: A</strong>
-          </p>
-          <form onSubmit={handleUploadAnswerKey} className="space-y-4">
-            <select value={selectedQuizForKey} onChange={(e) => setSelectedQuizForKey(e.target.value)} className="input-tactile" required>
-              <option value="">-- Select a quiz --</option>
-              {quizzes.map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.title}
-                </option>
-              ))}
-            </select>
-            <input
-              type="file"
-              accept=".md,.txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(e) => setAnswerKeyFile(e.target.files?.[0] ?? null)}
-              className="w-full cursor-pointer bg-white rounded-[var(--radius-btn)] p-2 file:mr-4 file:border-0 file:rounded-[var(--radius-btn)] file:bg-ink file:px-4 file:py-2 file:text-white file:font-accent file:font-bold"
-              required
-            />
-            <button className="btn-tactile w-full justify-center bg-ink text-white">Map Answer Key</button>
-          </form>
-        </section>
-      </div>
+      <section className="card-tactile bg-yellow p-6 sm:p-8">
+        <h2 className="mb-6 flex items-center gap-2 text-xl font-display">
+          <Key /> Upload Answer Key
+        </h2>
+        <p className="mb-4 text-sm font-mono bg-white rounded-[var(--radius-btn)] p-3">
+          Format: <strong>Q1: D</strong> or <strong>1: A</strong>
+        </p>
+        <form onSubmit={handleUploadAnswerKey} className="grid gap-4 sm:grid-cols-2 sm:items-start">
+          <select value={selectedQuizForKey} onChange={(e) => setSelectedQuizForKey(e.target.value)} className="input-tactile" required>
+            <option value="">-- Select a quiz --</option>
+            {quizzes.map((q) => (
+              <option key={q.id} value={q.id}>
+                {q.title}
+              </option>
+            ))}
+          </select>
+          <input
+            type="file"
+            accept=".md,.txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={(e) => setAnswerKeyFile(e.target.files?.[0] ?? null)}
+            className="w-full cursor-pointer bg-white rounded-[var(--radius-btn)] p-2 file:mr-4 file:border-0 file:rounded-[var(--radius-btn)] file:bg-ink file:px-4 file:py-2 file:text-white file:font-accent file:font-bold"
+            required
+          />
+          <button className="btn-tactile justify-center bg-ink text-white sm:col-span-2">Map Answer Key</button>
+        </form>
+      </section>
 
       <DailyChallengePanel />
 

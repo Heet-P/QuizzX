@@ -13,6 +13,7 @@ import { QuestionCard } from "./QuestionCard";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { useQuizCheating } from "@/hooks/useQuizCheating";
 import { useToast } from "@/components/Toast";
+import { apiFetch } from "@/lib/api-client";
 import { normalizeQuizSettings, type QuizQuestion } from "@/types/quiz";
 
 interface QuizData {
@@ -112,11 +113,8 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
         if (data.settings?.accessCode) setNeedsPin(true);
 
         try {
-          const draftRes = await fetch(`/api/submissions/draft/${id}`);
-          if (draftRes.ok) {
-            const draftData = await draftRes.json();
-            if (draftData.draft) setAnswers((prev) => ({ ...prev, ...draftData.draft }));
-          }
+          const draftData = await apiFetch<{ draft?: Record<number, string> }>(`/api/submissions/draft/${id}`);
+          if (draftData.draft) setAnswers((prev) => ({ ...prev, ...draftData.draft }));
         } catch {
           // draft fetch is optional
         }
@@ -131,9 +129,8 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
 
   useEffect(() => {
     if (!challengerId || !id) return;
-    fetch(`/api/users/challenge-info?challengerId=${challengerId}&quizId=${id}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => data && setChallengerInfo(data))
+    apiFetch<ChallengerInfo>(`/api/users/challenge-info?challengerId=${challengerId}&quizId=${id}`)
+      .then((data) => setChallengerInfo(data))
       .catch(() => {});
   }, [challengerId, id]);
 
@@ -146,12 +143,11 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
 
   const fetchNonce = useCallback(async () => {
     try {
-      const res = await fetch("/api/submissions/start", {
+      const data = await apiFetch<{ nonce: string }>("/api/submissions/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quizId: id }),
       });
-      const data = await res.json();
       nonceRef.current = data.nonce;
     } catch {
       // start-attempt failure surfaces later as a submit error
@@ -166,7 +162,7 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
       const currentAnswersStr = JSON.stringify(answersRef.current);
       const lastSavedStr = JSON.stringify(lastSavedAnswersRef.current);
       if (currentAnswersStr !== lastSavedStr) {
-        fetch("/api/submissions/draft", {
+        apiFetch("/api/submissions/draft", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ quizId: id, answers: answersRef.current }),
@@ -189,13 +185,11 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
     submittedRef.current = true;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/submissions", {
+      const data = await apiFetch<SubmitResult>("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quizId: id, answers: answersRef.current, nonce: nonceRef.current }),
       });
-      if (!res.ok) throw new Error("submit failed");
-      const data: SubmitResult = await res.json();
       window.localStorage.removeItem(`quiz_progress_${id}`);
 
       if (data.xpGained) toast.xp(data.xpGained);

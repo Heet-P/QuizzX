@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Key } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
 
 // Ported from client/src/pages/QuizPage.jsx's inline PinGateModal.
 export function PinGateModal({
@@ -22,12 +23,11 @@ export function PinGateModal({
     setChecking(true);
     setError("");
     try {
-      const res = await fetch(`/api/quizzes/${quizId}/verify-pin`, {
+      const data = await apiFetch<{ valid: boolean }>(`/api/quizzes/${quizId}/verify-pin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pin }),
       });
-      const data = await res.json();
       if (data.valid) {
         onVerify();
       } else {

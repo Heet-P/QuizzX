@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Flame, Copy, CheckCircle, MessageCircle, Send, ExternalLink, Swords, Handshake, Frown } from "lucide-react";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 
 interface ResultData {
   score: number;
@@ -161,10 +162,9 @@ export function ResultsClient({
   useEffect(() => {
     const fetchRank = async () => {
       try {
-        const res = await fetch(`/api/leaderboard?quizId=${id}`);
-        const data = await res.json();
+        const data = await apiFetch<{ rows?: { username?: string }[] }>(`/api/leaderboard?quizId=${id}`);
         const rows = data?.rows || [];
-        const myIdx = rows.findIndex((r: { username?: string }) => r.username?.toLowerCase() === username?.toLowerCase());
+        const myIdx = rows.findIndex((r) => r.username?.toLowerCase() === username?.toLowerCase());
         setRank(myIdx >= 0 ? myIdx + 1 : null);
       } catch {
         setRank(null);
@@ -178,8 +178,7 @@ export function ResultsClient({
   useEffect(() => {
     const fetchComments = async () => {
       try {
-        const res = await fetch(`/api/quizzes/${id}/comments`);
-        const data = await res.json();
+        const data = await apiFetch<Comment[] | { comments?: Comment[] }>(`/api/quizzes/${id}/comments`);
         setComments(Array.isArray(data) ? data : (data.comments ?? []));
       } catch {
         // optional
@@ -211,16 +210,11 @@ export function ResultsClient({
     setSubmittingComment(true);
     setCommentError(null);
     try {
-      const res = await fetch(`/api/quizzes/${id}/comments`, {
+      const data = await apiFetch<{ comment?: Comment }>(`/api/quizzes/${id}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: commentText.trim() }),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error || "Failed to post comment.");
-      }
-      const data = await res.json();
       const newComment: Comment = data?.comment ?? {
         body: commentText.trim(),
         username,
@@ -229,7 +223,7 @@ export function ResultsClient({
       setComments((prev) => [newComment, ...prev]);
       setCommentText("");
     } catch (err) {
-      setCommentError(err instanceof Error ? err.message : "Failed to post comment.");
+      setCommentError(errorMessage(err, "Failed to post comment."));
     } finally {
       setSubmittingComment(false);
     }

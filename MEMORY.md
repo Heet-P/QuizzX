@@ -948,6 +948,44 @@ piece.
 
 ## 9. Known Issues / Things Actively NOT Working
 
+- ~~Client-side `/api/*` calls could surface raw JSON-parse errors~~ **Fixed
+  2026-07-23** — since `/api/*` doesn't exist yet, an un-guarded `res.json()`
+  on Next's HTML 404 body threw `Unexpected token '<', "<!DOCTYPE "... is not
+  valid JSON` straight into toasts (user hit this on the profile
+  username-save form and the team create/join/leave forms). Added
+  `lib/api-client.ts` (`apiFetch`/`apiFetchBlob`/`errorMessage`) — checks
+  `res.ok`/content-type before parsing, throws a clean `ApiError` with a
+  friendly message instead. Swept every client component doing `/api/*`
+  fetches to use it (team, profile, admin + its 3 sub-components, quizzes,
+  quiz-taking, results, leaderboard, proctor, teacher, live lobby, presenter,
+  create-lobby). See `feedback_graceful_error_handling` in this agent's
+  cross-session memory — this pattern is now the standing default for any
+  new client-side fetch in this project, not just these call sites.
+- ~~Leaderboard had a "Campus" scope toggle with no real data behind it~~
+  **Fixed 2026-07-23** — the project has no college/university integration,
+  so campus scope was dead UI. Removed entirely (always implicitly global
+  now); also removed the auto-select-first-live-quiz behavior — the user
+  must explicitly pick a quiz from the dropdown before any leaderboard
+  content renders (a "Select a quiz above" prompt shows until they do). A
+  `quizId` passed via URL (e.g. the results page's "View Leaderboard" link)
+  still pre-selects one.
+- ~~Admin's "Upload Answer Key" panel only used half the page width~~ **Fixed
+  2026-07-23** — it was wrapped in a `grid lg:grid-cols-2` with only one
+  child (a v1 bug, ported faithfully then caught by the user) — now a normal
+  full-width section with its form fields laid out in an internal 2-column
+  grid instead.
+- **Clerk `<UserButton/>`'s dropdown is slow on first click** — this is
+  inherent to Clerk's SDK architecture (the trigger renders immediately, but
+  the popover UI is fetched as a separate chunk on first interaction, not
+  preloaded with the initial page bundle), not a bug in this app's code —
+  confirmed by checking installed `@clerk/nextjs`/`@clerk/shared` types for
+  any preload option (none exists). Added one concrete, low-risk mitigation
+  (2026-07-23): `lib/clerk-frontend-api.ts` decodes the Clerk publishable key
+  to get the Frontend API host, and `app/layout.tsx` emits
+  `<link rel="preconnect">`/`dns-prefetch` for it, warming the DNS+TLS
+  handshake ahead of the first click. This won't eliminate the delay (the
+  chunk itself still has to download), just shave the connection-setup part
+  off it — flagged to the user as a partial fix, not a full one.
 - ~~No application pages exist beyond the landing page and auth.~~ **Fixed
   2026-07-22** — all 12 application pages built, see Section 8.1. They're
   UI-complete but functionally inert wherever they need `/api/*` (which is

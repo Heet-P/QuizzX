@@ -37,6 +37,7 @@ import {
   Check,
 } from "lucide-react";
 import { useToast } from "@/components/Toast";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 import type { QuizSettings, QuizQuestion } from "@/types/quiz";
 
 type ModularSettings = Pick<
@@ -551,15 +552,13 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
     if (poolSize) formData.append("poolSize", poolSize);
     if (showCount) formData.append("showCount", showCount);
     try {
-      const res = await fetch("/api/admin/quizzes/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to upload quiz");
+      const data = await apiFetch<{ questionCount: number }>("/api/admin/quizzes/upload", { method: "POST", body: formData });
       toast.success(`Quiz created! ${data.questionCount} questions parsed.`);
       setQuizFile(null);
       resetShared();
       fetchQuizzes();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to upload quiz");
+      toast.error(errorMessage(err, "Failed to upload quiz"));
     }
   };
 
@@ -568,18 +567,16 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
     setGenerating(true);
     setGeneratedQuestions(null);
     try {
-      const res = await fetch("/api/ai/generate-quiz", {
+      const data = await apiFetch<{ questions: QuizQuestion[] }>("/api/ai/generate-quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: aiTopic.trim(), syllabus: aiSyllabus.trim() || undefined, count: aiCount }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "AI generation failed");
       setGeneratedQuestions(data.questions);
       if (!quizTitle) setQuizTitle(aiTopic.trim());
       toast.success(`${data.questions.length} questions generated!`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "AI generation failed");
+      toast.error(errorMessage(err, "AI generation failed"));
     } finally {
       setGenerating(false);
     }
@@ -597,13 +594,11 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
       showCount: parseInt(showCount) || null,
     };
     try {
-      const res = await fetch("/api/admin/quizzes/create", {
+      const data = await apiFetch<{ questionCount: number }>("/api/admin/quizzes/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: quizTitle, questions: generatedQuestions, settings: finalSettings }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create quiz");
       toast.success(`Quiz created! ${data.questionCount} questions.`);
       setGeneratedQuestions(null);
       setAiTopic("");
@@ -612,7 +607,7 @@ export function QuizUploader({ fetchQuizzes }: { fetchQuizzes: () => void }) {
       resetShared();
       fetchQuizzes();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create quiz");
+      toast.error(errorMessage(err, "Failed to create quiz"));
     }
   };
 

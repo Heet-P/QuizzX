@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Zap, Trash2, Rocket, Archive, Users, User, BarChart2, FileText, Shield, ChevronDown, ChevronUp, Star, Circle, CircleDot, Square, Key, Shuffle } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { apiFetch, apiFetchBlob, errorMessage } from "@/lib/api-client";
 import type { QuizSettings } from "@/types/quiz";
 
 export interface ManagedQuiz {
@@ -49,12 +50,11 @@ export function QuizManager({
 
   const handlePublish = async (quizId: string) => {
     try {
-      const res = await fetch(`/api/admin/quizzes/${quizId}/publish`, { method: "POST" });
-      if (!res.ok) throw new Error();
+      await apiFetch(`/api/admin/quizzes/${quizId}/publish`, { method: "POST" });
       fetchQuizzes();
       toast.success("Quiz is now live!");
-    } catch {
-      toast.error("Failed to publish quiz");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to publish quiz"));
     }
   };
 
@@ -65,12 +65,11 @@ export function QuizManager({
       onConfirm: async () => {
         setConfirm(null);
         try {
-          const res = await fetch(`/api/admin/quizzes/${quizId}/archive`, { method: "POST" });
-          if (!res.ok) throw new Error();
+          await apiFetch(`/api/admin/quizzes/${quizId}/archive`, { method: "POST" });
           fetchQuizzes();
           toast.success("Quiz archived");
-        } catch {
-          toast.error("Failed to archive quiz");
+        } catch (err) {
+          toast.error(errorMessage(err, "Failed to archive quiz"));
         }
       },
     });
@@ -84,12 +83,11 @@ export function QuizManager({
       onConfirm: async () => {
         setConfirm(null);
         try {
-          const res = await fetch(`/api/admin/quizzes/${quizId}`, { method: "DELETE" });
-          if (!res.ok) throw new Error();
+          await apiFetch(`/api/admin/quizzes/${quizId}`, { method: "DELETE" });
           fetchQuizzes();
           toast.success("Quiz deleted");
-        } catch {
-          toast.error("Failed to delete quiz");
+        } catch (err) {
+          toast.error(errorMessage(err, "Failed to delete quiz"));
         }
       },
     });
@@ -97,19 +95,17 @@ export function QuizManager({
 
   const handleFeature = async (quizId: string) => {
     try {
-      const res = await fetch(`/api/admin/quizzes/${quizId}/feature`, { method: "POST" });
-      if (!res.ok) throw new Error();
+      await apiFetch(`/api/admin/quizzes/${quizId}/feature`, { method: "POST" });
       fetchQuizzes();
       toast.success("Quiz is now featured on the dashboard");
-    } catch {
-      toast.error("Failed to feature quiz");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to feature quiz"));
     }
   };
 
   const handleDownloadIntegrity = async (quizId: string, title: string) => {
     try {
-      const res = await fetch(`/api/admin/quizzes/${quizId}/integrity`);
-      const blob = await res.blob();
+      const blob = await apiFetchBlob(`/api/admin/quizzes/${quizId}/integrity`);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -117,8 +113,8 @@ export function QuizManager({
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch {
-      toast.error("Failed to download integrity report");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to download integrity report"));
     }
   };
 
@@ -131,11 +127,10 @@ export function QuizManager({
     if (analytics[quizId]) return;
     setLoadingAnalytics((prev) => ({ ...prev, [quizId]: true }));
     try {
-      const res = await fetch(`/api/admin/quizzes/${quizId}/analytics`);
-      const data = await res.json();
+      const data = await apiFetch<QuestionAnalytics[]>(`/api/admin/quizzes/${quizId}/analytics`);
       setAnalytics((prev) => ({ ...prev, [quizId]: data }));
-    } catch {
-      toast.error("Failed to load analytics");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to load analytics"));
     } finally {
       setLoadingAnalytics((prev) => ({ ...prev, [quizId]: false }));
     }

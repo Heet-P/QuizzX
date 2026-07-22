@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { CalendarDays, Sparkles, Loader, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/Toast";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 import type { QuizSettings } from "@/types/quiz";
 
 interface DailyChallenge {
@@ -28,8 +29,7 @@ export function DailyChallengePanel() {
   const fetchChallenges = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/daily-challenge");
-      const data = await res.json();
+      const data = await apiFetch<{ challenges?: DailyChallenge[]; today?: string }>("/api/admin/daily-challenge");
       setChallenges(data.challenges ?? []);
       setTodayStr(data.today ?? "");
     } catch {
@@ -50,19 +50,17 @@ export function DailyChallengePanel() {
     if (!topic.trim()) return;
     setPublishing(true);
     try {
-      const res = await fetch("/api/admin/daily-challenge", {
+      const data = await apiFetch<{ title: string; questionCount: number }>("/api/admin/daily-challenge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), notes: notes.trim() || undefined }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to publish daily challenge");
       toast.success(`Daily challenge published! "${data.title}" (${data.questionCount} questions)`);
       setTopic("");
       setNotes("");
       fetchChallenges();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to publish daily challenge");
+      toast.error(errorMessage(err, "Failed to publish daily challenge"));
     } finally {
       setPublishing(false);
     }
