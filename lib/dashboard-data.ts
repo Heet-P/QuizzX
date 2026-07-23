@@ -185,14 +185,22 @@ interface RawQuizRow {
 }
 
 /**
- * Exact port of v1's QuizController.getDailyQuiz 3-tier fallback: today's
- * explicitly-published daily -> most recent published daily (any date) ->
- * seed-based pick from all live quizzes. Uses raw SQL for tiers 2/3 because
- * ordering/selecting by a JSON subfield path isn't expressible through
- * Prisma's query builder. Preserves v1's server-local-time date string quirk
- * (can disagree with Postgres's own `CURRENT_DATE`, used below for
- * `completedToday`, if server and DB timezones differ) — a known existing
- * behavior, not something to silently correct during the port.
+ * 2-tier lookup: today's explicitly-published daily -> most recent
+ * published daily (any date). Uses raw SQL because ordering/selecting by a
+ * JSON subfield path isn't expressible through Prisma's query builder.
+ * Preserves v1's server-local-time date string quirk (can disagree with
+ * Postgres's own `CURRENT_DATE`, used below for `completedToday`, if server
+ * and DB timezones differ) — a known existing behavior, not something to
+ * silently correct during the port.
+ *
+ * Changed 2026-07-23 per explicit user report: v1's original 3rd tier
+ * ("seed-based pick from all live quizzes" when no admin ever published a
+ * daily challenge) caused any ordinary live quiz — including ones just
+ * created via the AI parser — to get showcased as "Today's Challenge" on
+ * the dashboard, even though nobody ever marked it as one. Removed rather
+ * than kept "for parity" — returning null now, so the dashboard simply
+ * omits the Daily Challenge card until an admin actually publishes one, and
+ * the quiz only shows up where it actually belongs: the normal /quizzes list.
  */
 export async function getDailyQuizForUser(userId: string): Promise<DailyQuiz | null> {
   const today = new Date();
@@ -218,16 +226,7 @@ export async function getDailyQuizForUser(userId: string): Promise<DailyQuiz | n
     `;
   }
 
-  if (rows.length === 0) {
-    const allRows = await prisma.$queryRaw<RawQuizRow[]>`
-      SELECT id, title, settings, created_at FROM quizzes
-      WHERE status = 'live'
-      ORDER BY created_at ASC
-    `;
-    if (allRows.length === 0) return null;
-    const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
-    rows = [allRows[seed % allRows.length]];
-  }
+  if (rows.length === 0) return null;
 
   const quiz = rows[0];
 

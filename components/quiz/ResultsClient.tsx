@@ -3,9 +3,10 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
-import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Flame, Copy, CheckCircle, MessageCircle, Send, ExternalLink, Swords, Handshake, Frown } from "lucide-react";
-import { apiFetch, errorMessage } from "@/lib/api-client";
+import { motion } from "framer-motion";
+import { Trophy, Flame, Copy, CheckCircle, ExternalLink, Swords, Handshake, Frown, ImageIcon } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
+import { ShareCardModal } from "./ShareCardModal";
 
 interface ResultData {
   score: number;
@@ -22,15 +23,6 @@ interface ChallengerInfo {
 
 interface StashedResult extends ResultData {
   challenger: ChallengerInfo | null;
-}
-
-interface Comment {
-  id?: string;
-  username?: string;
-  created_at?: string;
-  body?: string;
-  text?: string;
-  comment?: string;
 }
 
 function CircleRing({ score, total }: { score: number; total: number }) {
@@ -104,20 +96,6 @@ function ConfettiDots() {
   );
 }
 
-function CommentItem({ comment }: { comment: Comment }) {
-  return (
-    <div className="rounded-[var(--radius-card-sm)] border-2 border-ink/10 p-3 bg-white">
-      <div className="flex items-center justify-between mb-1">
-        <span className="font-accent font-bold text-sm">{comment.username || "Anonymous"}</span>
-        <span className="text-xs font-mono text-ink/40">
-          {comment.created_at ? new Date(comment.created_at).toLocaleDateString() : ""}
-        </span>
-      </div>
-      <p className="text-sm font-accent font-bold text-ink/70">{comment.body || comment.text || comment.comment}</p>
-    </div>
-  );
-}
-
 // Ported from client/src/pages/QuizResultsPage.jsx. v1 preferred React Router
 // `location.state` (set by QuizPage after submission) over URL params (used
 // by share links); Next.js has no route-state equivalent, so QuizClient
@@ -150,12 +128,9 @@ export function ResultsClient({
 
   const [rank, setRank] = useState<number | null>(null);
   const [rankLoading, setRankLoading] = useState(true);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [commentText, setCommentText] = useState("");
-  const [submittingComment, setSubmittingComment] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [challengeCopied, setChallengeCopied] = useState(false);
-  const [commentError, setCommentError] = useState<string | null>(null);
+  const [shareCardOpen, setShareCardOpen] = useState(false);
 
   const username = clerkUser?.username || clerkUser?.firstName || "";
 
@@ -175,18 +150,6 @@ export function ResultsClient({
     if (id) fetchRank();
   }, [id, username]);
 
-  useEffect(() => {
-    const fetchComments = async () => {
-      try {
-        const data = await apiFetch<Comment[] | { comments?: Comment[] }>(`/api/quizzes/${id}/comments`);
-        setComments(Array.isArray(data) ? data : (data.comments ?? []));
-      } catch {
-        // optional
-      }
-    };
-    if (id) fetchComments();
-  }, [id]);
-
   const handleShare = () => {
     const url = `${window.location.origin}/quiz/${id}/results?score=${score}&correct=${correct}&total=${total}&quizTitle=${encodeURIComponent(quizTitle)}&streak=${streak}`;
     navigator.clipboard.writeText(url).then(() => {
@@ -202,31 +165,6 @@ export function ResultsClient({
       setChallengeCopied(true);
       setTimeout(() => setChallengeCopied(false), 2000);
     });
-  };
-
-  const handleSubmitComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!commentText.trim()) return;
-    setSubmittingComment(true);
-    setCommentError(null);
-    try {
-      const data = await apiFetch<{ comment?: Comment }>(`/api/quizzes/${id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: commentText.trim() }),
-      });
-      const newComment: Comment = data?.comment ?? {
-        body: commentText.trim(),
-        username,
-        created_at: new Date().toISOString(),
-      };
-      setComments((prev) => [newComment, ...prev]);
-      setCommentText("");
-    } catch (err) {
-      setCommentError(errorMessage(err, "Failed to post comment."));
-    } finally {
-      setSubmittingComment(false);
-    }
   };
 
   const pct = total > 0 ? (score / total) * 100 : 0;
@@ -296,6 +234,10 @@ export function ResultsClient({
         transition={{ duration: 0.4, delay: 0.25 }}
         className="grid grid-cols-1 sm:grid-cols-2 gap-3"
       >
+        <button onClick={() => setShareCardOpen(true)} className="btn-tactile justify-center bg-orange text-white py-3 sm:col-span-2">
+          <ImageIcon size={18} /> Share Result Card
+        </button>
+
         <button onClick={handleShare} className="btn-tactile justify-center bg-blue text-white py-3">
           {shareCopied ? <CheckCircle size={18} /> : <Copy size={18} />}
           {shareCopied ? "Copied!" : "Share Result"}
@@ -317,56 +259,17 @@ export function ResultsClient({
         )}
       </motion.div>
 
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.4 }}
-        className="card-tactile p-6 sm:p-8"
-      >
-        <h2 className="flex items-center gap-2 text-xl font-display mb-4">
-          <MessageCircle size={20} /> Comments
-        </h2>
-
-        <form onSubmit={handleSubmitComment} className="mb-5 space-y-2">
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Share your thoughts about this quiz…"
-            rows={3}
-            className="input-tactile resize-none"
-            maxLength={500}
-          />
-          {commentError && <p className="text-sm font-accent font-bold text-coral">{commentError}</p>}
-          <button
-            type="submit"
-            disabled={submittingComment || !commentText.trim()}
-            className="btn-tactile bg-ink text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send size={16} /> {submittingComment ? "Posting…" : "Post Comment"}
-          </button>
-        </form>
-
-        {comments.length === 0 ? (
-          <p className="text-sm font-accent font-bold text-ink/40 text-center py-4 rounded-[var(--radius-card-sm)] border-2 border-dashed border-ink/15">
-            No comments yet. Be the first!
-          </p>
-        ) : (
-          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-            <AnimatePresence>
-              {comments.map((c, i) => (
-                <motion.div
-                  key={c.id || i}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.2, delay: i * 0.04 }}
-                >
-                  <CommentItem comment={c} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
-      </motion.section>
+      <ShareCardModal
+        open={shareCardOpen}
+        onClose={() => setShareCardOpen(false)}
+        username={clerkUser?.username || clerkUser?.firstName || "Player"}
+        avatarUrl={clerkUser?.imageUrl}
+        quizTitle={quizTitle}
+        score={score}
+        correct={correct}
+        total={total}
+        streak={streak}
+      />
     </div>
   );
 }

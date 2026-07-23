@@ -19,8 +19,17 @@ export interface ManagedQuiz {
 }
 
 interface QuestionAnalytics {
-  accuracy: number;
-  top_wrong?: string;
+  id?: number;
+  text?: string;
+  accuracy: number | null;
+  top_wrong_answer?: string | null;
+}
+
+interface QuizAnalyticsData {
+  questions: QuestionAnalytics[];
+  submission_count: number;
+  avg_score: number;
+  completion_rate: number;
 }
 
 const STATUS_CONFIG = {
@@ -44,7 +53,7 @@ export function QuizManager({
   const router = useRouter();
   const toast = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [analytics, setAnalytics] = useState<Record<string, QuestionAnalytics[]>>({});
+  const [analytics, setAnalytics] = useState<Record<string, QuizAnalyticsData>>({});
   const [loadingAnalytics, setLoadingAnalytics] = useState<Record<string, boolean>>({});
   const [confirm, setConfirm] = useState<{ title: string; message: string; danger?: boolean; onConfirm: () => void } | null>(null);
 
@@ -127,7 +136,7 @@ export function QuizManager({
     if (analytics[quizId]) return;
     setLoadingAnalytics((prev) => ({ ...prev, [quizId]: true }));
     try {
-      const data = await apiFetch<QuestionAnalytics[]>(`/api/admin/quizzes/${quizId}/analytics`);
+      const data = await apiFetch<QuizAnalyticsData>(`/api/admin/quizzes/${quizId}/analytics`);
       setAnalytics((prev) => ({ ...prev, [quizId]: data }));
     } catch (err) {
       toast.error(errorMessage(err, "Failed to load analytics"));
@@ -248,15 +257,20 @@ export function QuizManager({
                     <div className="border-t-2 border-ink/10 bg-cream p-4">
                       {loadingAnalytics[quiz.id] ? (
                         <p className="text-sm font-accent font-bold animate-pulse">Loading analytics…</p>
-                      ) : !quizAnalytics || quizAnalytics.length === 0 ? (
+                      ) : !quizAnalytics || quizAnalytics.questions.length === 0 ? (
                         <p className="text-sm font-accent font-bold text-ink/50">No submissions yet to analyse.</p>
                       ) : (
                         <div className="space-y-3">
+                          <div className="flex items-center gap-4 text-xs font-accent font-bold uppercase text-ink/60 mb-1">
+                            <span>{quizAnalytics.submission_count} submissions</span>
+                            <span>Avg {quizAnalytics.avg_score.toFixed(1)} pts</span>
+                            <span>{Math.round(quizAnalytics.completion_rate * 100)}% completion</span>
+                          </div>
                           <p className="text-xs font-accent font-bold uppercase text-ink/50 mb-2 flex items-center gap-1">
                             <Shuffle size={12} /> Per-Question Accuracy
                           </p>
-                          {quizAnalytics.map((q, i) => {
-                            const pct = Math.min(100, Math.round(q.accuracy ?? 0));
+                          {quizAnalytics.questions.map((q, i) => {
+                            const pct = Math.min(100, Math.round((q.accuracy ?? 0) * 100));
                             const barColor = pct >= 70 ? "bg-green" : pct >= 40 ? "bg-yellow" : "bg-coral";
                             return (
                               <div key={i} className="flex items-center gap-3">
@@ -265,9 +279,9 @@ export function QuizManager({
                                   <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
                                 </div>
                                 <span className="w-12 text-xs font-mono font-bold text-right shrink-0">{pct}%</span>
-                                {q.top_wrong && (
-                                  <span className="text-xs text-ink/40 truncate max-w-[120px]" title={`Most wrong: ${q.top_wrong}`}>
-                                    {q.top_wrong}
+                                {q.top_wrong_answer && (
+                                  <span className="text-xs text-ink/40 truncate max-w-[120px]" title={`Most wrong: ${q.top_wrong_answer}`}>
+                                    {q.top_wrong_answer}
                                   </span>
                                 )}
                               </div>

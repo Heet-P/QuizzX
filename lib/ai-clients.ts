@@ -13,7 +13,12 @@ export const nim = new OpenAI({
   apiKey: process.env.NVIDIA_NIM_API_KEY || "not-set",
   baseURL: "https://integrate.api.nvidia.com/v1",
 });
-export const NIM_MODEL = "meta/llama-3.1-8b-instruct";
+// Updated 2026-07-23 to the model the user confirmed working against their
+// NIM key (a reasoning/"harmony"-format model — it can emit a separate
+// `reasoning_content` field alongside `content`; streamToText below only
+// ever accumulates `content`, so the reasoning trace is never surfaced to
+// end users, intentionally).
+export const NIM_MODEL = "openai/gpt-oss-120b";
 
 export const groq = new OpenAI({
   apiKey: process.env.GROQ_API_KEY || "not-set",
