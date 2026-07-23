@@ -1,11 +1,13 @@
 /* Full-screen "locking in your answers" liquid submission animation.
-   The rising surface uses a gooey "metaball" bubble effect (adapted from a
-   user-supplied reference, originally a footer decoration) instead of drawn
-   wave curves: many small circles rise and shrink independently, and an SVG
-   `feGaussianBlur` + `feColorMatrix` filter (`#liquid-blob`, defined in the
-   component) blurs and re-thresholds them so overlapping circles visually
-   melt into one continuous organic blob instead of reading as separate
-   dots — the classic CSS "gooey" technique. */
+   The rising surface uses a tiled, repeating wave-texture image
+   (public/wave-green.svg, adapted from a user-supplied reference — a
+   circular "today's progress" widget that used the same repeat-x
+   background-image + horizontal-drift technique, here recolored green and
+   scaled up to a full-screen band instead of a small circle). Two copies
+   at different sizes/speeds/opacity/directions ride the top edge of the
+   already-rising .fillWrap (whose own height animation, driven from the
+   component, is what actually "fills the whole screen slowly" — the wave
+   layers are purely the surface decoration on top of that). */
 
 .overlay {
   position: fixed;
@@ -38,49 +40,56 @@
   background: #22c55e;
 }
 
-/* The gooey rising surface — sits right at the top edge of .fillWrap.
-   `overflow: visible` lets bubbles poke up well above this thin strip
-   before they shrink away; the blur filter is what makes them melt
-   together instead of looking like a field of separate circles. */
-.bubbleField {
+/* Tiled wave texture riding the rising fill's surface. Sits partly above
+   the flat top edge of .fillWrap (negative top offset) so the wavy crest
+   pokes above the solid body, same positioning idea as the reference's
+   wave-vs-wave-below layering, just achieved with a fixed-position strip
+   instead of independently animating background-position for the fill
+   itself (.fillWrap's own height animation already handles "how full" it
+   is — these layers are only ever the surface texture). */
+.waveTexture {
   position: absolute;
-  top: 0;
   left: 0;
   right: 0;
-  height: 1rem;
-  overflow: visible;
-  filter: url(#liquid-blob);
+  background-image: url("/wave-green.svg");
+  background-repeat: repeat-x;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
-.blobBubble {
-  position: absolute;
-  left: var(--position, 50%);
-  bottom: -4rem;
-  width: var(--size, 4rem);
-  height: var(--size, 4rem);
-  background: #22c55e;
-  border-radius: 100%;
-  transform: translate(-50%, 100%);
-  animation:
-    blob-bubble-size var(--time, 4s) ease-in infinite var(--delay, 0s),
-    blob-bubble-move var(--time, 4s) ease-in infinite var(--delay, 0s);
+.waveTextureA {
+  top: -50px;
+  height: 90px;
+  background-size: 360px 90px;
+  opacity: 0.55;
+  animation-name: wave-slosh-a;
+  animation-duration: 7s;
+  animation-direction: reverse;
 }
-@keyframes blob-bubble-size {
-  0%,
-  75% {
-    width: var(--size, 4rem);
-    height: var(--size, 4rem);
+.waveTextureB {
+  top: -28px;
+  height: 60px;
+  background-size: 240px 60px;
+  opacity: 0.9;
+  animation-name: wave-slosh-b;
+  animation-duration: 4.5s;
+}
+/* Shift by exactly one tile width each — seamless regardless of viewport
+   width, unlike a percentage shift (which is relative to container size,
+   not tile size, and would visibly jump for a repeating background). */
+@keyframes wave-slosh-a {
+  from {
+    background-position-x: 0;
   }
-  100% {
-    width: 0rem;
-    height: 0rem;
+  to {
+    background-position-x: -360px;
   }
 }
-@keyframes blob-bubble-move {
-  0% {
-    bottom: -4rem;
+@keyframes wave-slosh-b {
+  from {
+    background-position-x: 0;
   }
-  100% {
-    bottom: var(--distance, 10rem);
+  to {
+    background-position-x: -240px;
   }
 }
 

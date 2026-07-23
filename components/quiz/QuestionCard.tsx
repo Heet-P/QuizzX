@@ -219,16 +219,24 @@ function McqMultiBody({ question, idx, answer, feedback, isLocked, onSelect }: T
   );
 }
 
-function FillBlankBody({ question: _question, idx, answer, isLocked, onSelect }: TypeBodyProps<FillBlankSanitized, string>) {
+function FillBlankBody({ question, idx, answer, feedback, isLocked, onSelect }: TypeBodyProps<FillBlankSanitized, string>) {
+  const borderClass = feedback === "correct" ? "border-green" : feedback === "wrong" ? "border-coral" : "";
   return (
-    <input
-      type="text"
-      value={answer}
-      onChange={(e) => onSelect(idx, e.target.value)}
-      disabled={isLocked}
-      placeholder="Type your answer…"
-      className="input-tactile disabled:cursor-not-allowed disabled:opacity-70"
-    />
+    <div className="space-y-2">
+      <input
+        type="text"
+        value={answer}
+        onChange={(e) => onSelect(idx, e.target.value)}
+        disabled={isLocked}
+        placeholder="Type your answer…"
+        className={`input-tactile disabled:cursor-not-allowed disabled:opacity-70 ${borderClass}`}
+      />
+      {feedback === "wrong" && question.answer && (
+        <p className="flex items-center gap-1 text-sm font-accent font-bold text-green">
+          <CheckCircle size={14} /> Correct answer: {question.answer}
+        </p>
+      )}
+    </div>
   );
 }
 

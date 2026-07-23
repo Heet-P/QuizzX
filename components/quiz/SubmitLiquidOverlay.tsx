@@ -32,26 +32,6 @@ const PARTICLES = [
   { x: 93, size: 4, delay: 1.6, duration: 2.5 },
 ];
 
-// Deterministic pseudo-random (sine-hash), computed once at module load —
-// not Math.random(), and not called during render, so it never trips the
-// "impure function during render" lint rule (same reasoning as PARTICLES
-// above). Gives the 128 gooey bubbles varied-looking size/timing without
-// actual per-render randomness.
-function seededRandom(seed: number): number {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
-
-const BUBBLE_COUNT = 128;
-/** Rising gooey "metaball" bubbles for the fill's surface — see the module CSS's header comment for the blur-filter technique. Adapted from a user-supplied reference. */
-const BUBBLES = Array.from({ length: BUBBLE_COUNT }, (_, i) => ({
-  size: 2 + seededRandom(i * 12.9898 + 1) * 4, // rem
-  distance: 6 + seededRandom(i * 78.233 + 2) * 4, // rem
-  position: -5 + seededRandom(i * 37.719 + 3) * 110, // %
-  time: 2 + seededRandom(i * 94.673 + 4) * 2, // s
-  delay: -1 * (2 + seededRandom(i * 15.234 + 5) * 2), // s
-}));
-
 const CONFETTI_COLORS = ["#ffd200", "#2e5bff", "#ff4b36", "#8b5cf6", "#ff9500", "#ffffff"];
 // angle (degrees around the burst center), distance (px), end rotation (deg), start delay (s)
 const CONFETTI = [
@@ -117,16 +97,6 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
 
   return (
     <div className={styles.overlay}>
-      {!reduceMotion && (
-        <svg aria-hidden="true" style={{ position: "absolute", width: 0, height: 0 }}>
-          <defs>
-            <filter id="liquid-blob">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
-              <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="blob" />
-            </filter>
-          </defs>
-        </svg>
-      )}
       <div className={styles.blocker} />
       <motion.div
         className={styles.fillWrap}
@@ -156,23 +126,8 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
         <div className={reduceMotion ? styles.fillBodyFlat : styles.fillBody}>
           {!reduceMotion && (
             <>
-              <div className={styles.bubbleField}>
-                {BUBBLES.map((b, i) => (
-                  <span
-                    key={i}
-                    className={styles.blobBubble}
-                    style={
-                      {
-                        "--size": `${b.size}rem`,
-                        "--distance": `${b.distance}rem`,
-                        "--position": `${b.position}%`,
-                        "--time": `${b.time}s`,
-                        "--delay": `${b.delay}s`,
-                      } as CSSProperties
-                    }
-                  />
-                ))}
-              </div>
+              <div className={`${styles.waveTexture} ${styles.waveTextureA}`} />
+              <div className={`${styles.waveTexture} ${styles.waveTextureB}`} />
 
               {PARTICLES.map((p, i) => (
                 <div

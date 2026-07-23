@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Trophy, Flame, Copy, CheckCircle, ExternalLink, Swords, Handshake, Frown, ImageIcon } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
 import { ShareCardModal } from "./ShareCardModal";
+import { AnswerReview } from "./AnswerReview";
 
 interface ResultData {
   score: number;
@@ -261,6 +262,8 @@ export function ResultsClient({
           </Link>
         )}
       </motion.div>
+
+      <AnswerReview quizId={id} />
 
       <ShareCardModal
         open={shareCardOpen}

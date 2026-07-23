@@ -1882,3 +1882,67 @@ Not yet visually verified in a live browser by the agent (Section 9's
 standing note, same caveat as Section 19/20) — flagged to the user to
 confirm the blob/gooey look actually renders as intended and performs
 acceptably with 128 animated elements + an SVG filter.
+
+**Superseded same day, later (Section 22)**: the gooey bubble/blob surface
+was itself replaced with a tiled wave-texture-image technique per a second
+reference the user supplied. The SVG blur filter, `BUBBLES` array, and
+`seededRandom` helper described above no longer exist in the codebase —
+don't go looking for them.
+
+---
+
+## 22. Answer Review + Second Wave-Effect Rework (2026-07-23, later still)
+
+**22.1 — Answer review after quiz completion** (explicit new feature
+request): users can now see their own submitted answer next to the correct
+one for every question, once their submission is `completed`.
+- `GET /api/quizzes/[id]/review` (new route) — requires the caller to
+  already have a completed submission for that quiz (403 otherwise, "Complete
+  this quiz first"), then returns `sanitizeQuestion(q, true)` for every
+  question (the *practice-mode* sanitized shape, answer key populated) plus
+  the submission's stored `answers`. Revealing the answer key here is safe
+  specifically because the submission is already `completed` and immutable
+  (see `app/api/submissions/route.ts`'s conflict check) — there's no
+  remaining attempt to leak into.
+- `components/quiz/AnswerReview.tsx` (new, wired into `ResultsClient.tsx`
+  below the button grid as a collapsible "Review My Answers" section,
+  lazy-fetched on first expand) — deliberately **reuses `QuestionCard`
+  itself** rather than building a parallel read-only rendering path:
+  passing `isLocked=true, isPractice=true` plus a per-question
+  `computeFeedback()` (mirrors `lib/answer-matching.ts`'s `scoreQuestion`
+  logic but client-side, using the existing `lib/quiz-client-scoring.ts`
+  helpers) gets the "Correct!"/"Incorrect" banner and explanation for free,
+  and — because the match-columns drag-wire body (Section 20.6) already
+  tints wires green/red whenever `question.pairs` is present — match-columns
+  review needed zero extra work.
+- Fixed a real gap while wiring this up: `FillBlankBody` in
+  `QuestionCard.tsx` previously ignored both `question` and `feedback`
+  entirely (never showed the correct answer, even in practice mode before
+  this). Now shows a green "Correct answer: …" line when `feedback ===
+  "wrong"`.
+
+**22.2 — Submission overlay surface swapped again**, per a second reference
+the user supplied (a circular "today's progress" widget using a tiled,
+repeating wave.svg background-image + horizontal-drift technique). Removed
+Section 21's gooey-bubble/blur-filter approach entirely, replaced with two
+`.waveTexture` layers using a real green wave asset
+(`public/wave-green.svg`, a simple repeatable sine-crest tile) at different
+sizes/opacities/speeds/directions riding the top edge of `.fillWrap`. Key
+adaptation decision: the reference's actual mechanic (animating
+`background-position` vertically via paired `fill-wave`/`fill-below`
+keyframes to represent "how full" the circle is) was **not** ported
+as-is — `.fillWrap`'s own Framer-Motion-driven `height: 0%→100%` animation
+(unchanged since Section 19) already does that job for a full-screen
+overlay; porting the reference's approach too would have fought with it.
+Only the *decorative surface texture itself* (a real tiled wave image
+instead of hand-drawn bezier curves or bubbles) and its continuous
+horizontal "sloshing" once mounted were adopted — each layer's CSS
+`@keyframes` shifts `background-position-x` by exactly that layer's own
+tile width (`-360px`/`-240px`), not a percentage, since a percentage shift
+on a *repeating* background is relative to (container size − image size),
+not the tile period, and would visibly jump instead of looping seamlessly.
+
+Not yet visually verified in a live browser by the agent (Section 9's
+standing note, same recurring caveat) — flagged to the user to confirm the
+review screen renders/scores correctly for all 4 question types and that
+the new wave-texture surface looks right.
