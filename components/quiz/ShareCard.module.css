@@ -1,0 +1,239 @@
+/* Adapted from the user-supplied reference (public/shareCard/index.html +
+   style.css) — same layout/structure, with the background driven by
+   --band-from/--band-to (set inline per score band, see lib/share-card.ts)
+   instead of a fixed yellow gradient, the crown made conditional, and Google
+   Fonts swapped for the app's own self-hosted --font-display/--font-accent
+   (this project self-hosts all fonts on purpose, see lib/fonts.ts). */
+
+.card {
+  --band-from: #ffd200;
+  --band-to: #ff9500;
+  width: 1200px;
+  height: 1200px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 36px;
+  border: 4px solid #171717;
+  background: radial-gradient(circle at 20% 10%, var(--band-from) 0, var(--band-to) 100%);
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.25);
+  color: #14120f;
+}
+
+.bgGrid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 80px 80px;
+  opacity: 0.3;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, #fff 0 5px, transparent 6px) 8% 10% / 240px 240px,
+    radial-gradient(circle, #4f7cff 0 5px, transparent 6px) 60% 65% / 280px 280px,
+    radial-gradient(circle, #22c55e 0 5px, transparent 6px) 90% 25% / 300px 300px,
+    radial-gradient(circle, #ef4444 0 5px, transparent 6px) 20% 75% / 250px 250px;
+  opacity: 0.8;
+}
+
+.top {
+  text-align: center;
+  padding-top: 80px;
+  position: relative;
+  z-index: 2;
+}
+.top p {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: 2px;
+  font-size: 30px;
+  font-family: var(--font-accent);
+}
+.top h1 {
+  margin: 8px 0 0;
+  font-size: 110px;
+  font-family: var(--font-display);
+}
+.top span {
+  font-size: 58px;
+}
+
+.stamp {
+  position: absolute;
+  left: 80px;
+  top: 120px;
+  width: 180px;
+  height: 180px;
+  border: 4px solid rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transform: rotate(-12deg);
+  font-weight: 800;
+  font-size: 32px;
+  text-align: center;
+  line-height: 1.25;
+  font-family: var(--font-accent);
+  padding: 0 14px;
+}
+
+.avatarWrap {
+  position: absolute;
+  left: 50%;
+  top: 360px;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 3;
+  width: 100%;
+}
+.avatar {
+  width: 270px;
+  height: 270px;
+  border-radius: 50%;
+  border: 14px solid #fff9ea;
+  object-fit: cover;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.25);
+  background: #ddd;
+  display: block;
+  margin: 0 auto;
+}
+.avatarFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 120px;
+  font-weight: 900;
+  font-family: var(--font-display);
+  color: #14120f;
+}
+.crown {
+  font-size: 70px;
+  margin-bottom: -25px;
+}
+.avatarWrap h2 {
+  margin: 18px 0 0;
+  font-size: 56px;
+  font-weight: 800;
+  font-family: var(--font-display);
+}
+
+.stats {
+  position: absolute;
+  top: 470px;
+  width: 270px;
+  height: 340px;
+  background: rgba(255, 252, 240, 0.95);
+  border-radius: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.15);
+  font-family: var(--font-accent);
+}
+.left {
+  left: 80px;
+}
+.right {
+  right: 80px;
+}
+.icon {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: #ffd21d;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  margin-top: -95px;
+  border: 8px solid #fff9ea;
+}
+.label {
+  margin-top: 20px;
+  font-weight: 700;
+  font-size: 30px;
+}
+.value {
+  font-size: 72px;
+  font-weight: 900;
+  margin-top: 10px;
+  font-family: var(--font-display);
+}
+.small {
+  font-size: 28px;
+  color: #444;
+  font-weight: 700;
+}
+
+.quiz {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 270px;
+  text-align: center;
+  width: 90%;
+}
+.quiz .sub {
+  font-size: 26px;
+  color: #666;
+  font-weight: 700;
+  font-family: var(--font-accent);
+}
+.quiz h3 {
+  font-size: 58px;
+  margin: 12px 0;
+  font-family: var(--font-display);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wave {
+  position: absolute;
+  left: 0;
+  bottom: 150px;
+  width: 100%;
+  height: 160px;
+  fill: #161616;
+}
+
+.footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 220px;
+  background: #161616;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 45px 60px;
+}
+.brand {
+  font-family: var(--font-display);
+  font-size: 48px;
+}
+.tag {
+  margin-top: 14px;
+  font-size: 26px;
+  color: #d8d8d8;
+  font-family: var(--font-accent);
+}
+.cta {
+  text-align: right;
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--font-accent);
+  color: #ffd200;
+}
+.pill {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 16px 34px;
+  border: 3px solid #ffd21d;
+  border-radius: 999px;
+  font-size: 26px;
+}

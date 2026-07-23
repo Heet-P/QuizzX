@@ -226,6 +226,7 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
     } catch {
       setSubmitStatus("error");
       setSubmitting(false);
+      setShowSubmitConfirm(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, toast, questions.length, quiz?.title, challengerInfo]);
@@ -500,10 +501,9 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
         message={`You've answered ${Object.keys(answers).length} of ${questions.length} questions. This cannot be undone.`}
         confirmLabel="Submit"
         cancelLabel="Keep Going"
-        onConfirm={() => {
-          setShowSubmitConfirm(false);
-          handleAutoSubmit();
-        }}
+        loading={submitting}
+        loadingLabel="Submitting…"
+        onConfirm={handleAutoSubmit}
         onCancel={() => setShowSubmitConfirm(false)}
       />
 

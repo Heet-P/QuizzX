@@ -61,6 +61,7 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
   const [hidden, setHidden] = useState(false);
   const [hiddenOwnUser, setHiddenOwnUser] = useState<{ score?: number } | null>(null);
   const [archived, setArchived] = useState(false);
+  const [notPublished, setNotPublished] = useState(false);
   const [quizMode, setQuizMode] = useState<"individual" | "team">("individual");
 
   const { isConnected, socketError, lastUpdateAt } = useLeaderboardStream(quizId);
@@ -93,6 +94,7 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
       const data = await apiFetch<{
         hidden?: boolean;
         archived?: boolean;
+        notPublished?: boolean;
         ownUser?: { score?: number };
         rows?: (IndividualRow | TeamRow)[];
       }>(`/api/leaderboard?${params.toString()}`);
@@ -100,13 +102,23 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
       if (data.hidden) {
         setHidden(true);
         setHiddenOwnUser(data.ownUser ?? null);
+        setArchived(false);
+        setNotPublished(false);
         setRows([]);
       } else if (data.archived) {
         setArchived(true);
+        setHidden(false);
+        setNotPublished(false);
+        setRows([]);
+      } else if (data.notPublished) {
+        setNotPublished(true);
+        setHidden(false);
+        setArchived(false);
         setRows([]);
       } else {
         setHidden(false);
         setArchived(false);
+        setNotPublished(false);
         setRows(data.rows ?? []);
       }
     } catch {
@@ -229,11 +241,21 @@ export function LeaderboardClient({ initialQuizId }: { initialQuizId: string | n
           <div className="text-xl font-display animate-pulse">Loading scores…</div>
         </div>
       ) : hidden ? (
-        <div className="card-tactile bg-yellow text-center py-12">
-          <p className="text-lg font-display mb-4 flex items-center justify-center gap-2">
-            <Lock size={20} /> Leaderboard is hidden
+        <div className="card-tactile bg-yellow text-center py-12 border-2 border-dashed border-ink/20">
+          <p className="text-3xl font-display mb-2 flex items-center justify-center gap-2">
+            <Lock size={26} /> Leaderboard: OFF
           </p>
-          {hiddenOwnUser && <p className="font-mono text-2xl font-bold">Your score: {hiddenOwnUser.score || 0}</p>}
+          <p className="text-sm font-accent font-bold text-ink/60 mt-1">
+            The admin has turned off leaderboard visibility for everyone right now.
+          </p>
+          {hiddenOwnUser && <p className="font-mono text-2xl font-bold mt-4">Your score: {hiddenOwnUser.score || 0}</p>}
+        </div>
+      ) : notPublished ? (
+        <div className="card-tactile bg-cream-deep text-center py-12">
+          <p className="text-lg font-display flex items-center justify-center gap-2">
+            <Lock size={20} /> Not published yet
+          </p>
+          <p className="text-sm font-accent font-bold text-ink/60 mt-1">This quiz hasn&apos;t been published yet.</p>
         </div>
       ) : archived ? (
         <div className="card-tactile bg-cream-deep text-center py-12">

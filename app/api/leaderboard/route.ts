@@ -46,10 +46,20 @@ export async function GET(req: Request) {
     quizId = liveQuiz?.id ?? null;
   }
 
+  // These are meaningful states the client renders specially (not fetch
+  // failures), so they're 200s carrying a flag — not 403/error statuses.
+  // They used to be 403s, which meant lib/api-client.ts's apiFetch (every
+  // non-2xx throws) discarded the body and threw before the client ever saw
+  // `hidden`/`notPublished`/`archived`, so those branches in
+  // LeaderboardClient were dead code and users just saw a generic "No
+  // scores yet" instead (found + fixed 2026-07-23).
   if (quizId && !isAdmin) {
     const q = await prisma.quiz.findUnique({ where: { id: quizId }, select: { status: true } });
     if (q?.status === "draft") {
-      return NextResponse.json({ error: "This quiz is not yet published", archived: true }, { status: 403 });
+      return NextResponse.json({ notPublished: true, message: "This quiz hasn't been published yet" });
+    }
+    if (q?.status === "archived") {
+      return NextResponse.json({ archived: true, message: "This quiz has ended" });
     }
   }
 
@@ -67,14 +77,11 @@ export async function GET(req: Request) {
             },
           })
         : null;
-      return NextResponse.json(
-        {
-          hidden: true,
-          message: "Leaderboard is hidden",
-          ownUser: ownUser ? { user_id: ownUser.id, username: ownUser.username, score: ownUser.submissions[0]?.score ?? 0 } : null,
-        },
-        { status: 403 }
-      );
+      return NextResponse.json({
+        hidden: true,
+        message: "Leaderboard is hidden",
+        ownUser: ownUser ? { user_id: ownUser.id, username: ownUser.username, score: ownUser.submissions[0]?.score ?? 0 } : null,
+      });
     }
   }
 

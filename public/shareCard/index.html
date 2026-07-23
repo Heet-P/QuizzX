@@ -1,0 +1,68 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuizzX Share Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="card">
+<div class="bg-grid"></div>
+<div class="confetti"></div>
+
+<div class="stamp">GOOD<br>EFFORT!</div>
+
+<div class="top">
+<p>I JUST SCORED</p>
+<h1>{{score}} <span>pts</span></h1>
+</div>
+
+<div class="stats left">
+<div class="icon">★</div>
+<div class="label">SCORE</div>
+<div class="value">{{correct}}/{{total}}</div>
+<div class="small">Correct</div>
+</div>
+
+<div class="avatar-wrap">
+<div class="crown">👑</div>
+<img class="avatar" src="{{avatar}}" alt="">
+<h2>{{displayName}}</h2>
+</div>
+
+<div class="stats right">
+<div class="icon">🔥</div>
+<div class="label">STREAK</div>
+<div class="value">{{streak}}</div>
+<div class="small">Days</div>
+</div>
+
+<div class="quiz">
+<div class="sub">QUIZ</div>
+<h3>{{quizName}}</h3>
+</div>
+
+<div class="footer">
+<div>
+<div class="brand">QUIZZX</div>
+<div class="tag">Learn. Play. Compete.</div>
+</div>
+
+<div class="cta">
+<div>Join me on QuizzX!</div>
+<div class="pill">quizzx.app</div>
+</div>
+</div>
+
+<svg class="wave" viewBox="0 0 1200 200" preserveAspectRatio="none">
+<path d="M0,80 C180,170 350,0 560,90 C760,175 980,20 1200,85 L1200,200 L0,200 Z"/>
+</svg>
+
+</div>
+</body>
+</html>

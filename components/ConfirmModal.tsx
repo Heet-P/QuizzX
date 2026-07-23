@@ -12,6 +12,8 @@ export function ConfirmModal({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   danger = false,
+  loading = false,
+  loadingLabel = "Submitting…",
   onConfirm,
   onCancel,
 }: {
@@ -21,6 +23,9 @@ export function ConfirmModal({
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** When true, keeps the modal open and fills the confirm button green while an async action is in flight, instead of closing immediately on click. */
+  loading?: boolean;
+  loadingLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -29,11 +34,11 @@ export function ConfirmModal({
   useEffect(() => {
     if (isOpen) confirmRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape" && !loading) onCancel();
     };
     if (isOpen) document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [isOpen, onCancel]);
+  }, [isOpen, loading, onCancel]);
 
   return (
     <AnimatePresence>
@@ -44,7 +49,7 @@ export function ConfirmModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-black/60"
-            onClick={onCancel}
+            onClick={loading ? undefined : onCancel}
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 16 }}
@@ -61,15 +66,17 @@ export function ConfirmModal({
               </div>
             </div>
             <div className="flex gap-2 justify-end">
-              <button onClick={onCancel} className="btn-tactile bg-cream-alt text-sm">
+              <button onClick={onCancel} disabled={loading} className="btn-tactile bg-cream-alt text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 {cancelLabel}
               </button>
               <button
                 ref={confirmRef}
                 onClick={onConfirm}
-                className={`btn-tactile text-sm text-white ${danger ? "bg-coral" : "bg-ink"}`}
+                disabled={loading}
+                className={`liquid-fill-btn btn-tactile text-sm text-white disabled:cursor-not-allowed ${danger ? "bg-coral" : "bg-ink"}`}
               >
-                {confirmLabel}
+                {loading && <span className="liquid-fill" />}
+                <span>{loading ? loadingLabel : confirmLabel}</span>
               </button>
             </div>
           </motion.div>

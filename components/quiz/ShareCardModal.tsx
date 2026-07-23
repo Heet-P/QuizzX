@@ -1,80 +1,113 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Download, Share2, ImageIcon } from "lucide-react";
-import { drawShareCard } from "@/lib/share-card";
+import { toPng } from "html-to-image";
+import { Tilt } from "@/components/core/tilt";
+import { ShareCardFace } from "./ShareCardFace";
+import type { ShareCardData } from "@/lib/share-card";
 
-interface ShareCardModalProps {
+const CARD_SIZE = 1200;
+
+interface ShareCardModalProps extends ShareCardData {
   open: boolean;
   onClose: () => void;
-  username: string;
-  avatarUrl?: string | null;
-  quizTitle: string;
-  score: number;
-  correct: number;
-  total: number;
-  streak: number;
 }
 
 // Strava/Duolingo-style shareable result image — added 2026-07-23 per
-// explicit user request ("makes our users our sellers on social medias").
-// Rendered entirely client-side onto a <canvas> (see lib/share-card.ts) and
-// handed to the user via download or the Web Share API — no server route,
-// no storage, since R2 is still deferred (MEMORY.md Section 9/11).
+// explicit user request ("makes our users our sellers on social medias"),
+// rewritten the same day to render the actual DOM/CSS card (adapted from
+// the user-supplied reference in public/shareCard/) instead of a hand-drawn
+// canvas, so the live preview and the exported PNG are guaranteed to match.
+// The card shows immediately with a shimmer sweep over just the avatar
+// while it loads; the PNG itself is generated silently in the background
+// right after so Download/Share are instant rather than waiting on click.
 export function ShareCardModal({ open, onClose, username, avatarUrl, quizTitle, score, correct, total, streak }: ShareCardModalProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.32);
+  const [avatarSettled, setAvatarSettled] = useState(!avatarUrl);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const [pngUrl, setPngUrl] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const run = async () => {
-      setReady(false);
+    const reset = () => {
+      setAvatarSettled(!avatarUrl);
+      setAvatarFailed(false);
+      setPngUrl(null);
       setError(null);
-      try {
-        await drawShareCard(canvas, { username, avatarUrl, quizTitle, score, correct, total, streak });
-        if (!cancelled) setReady(true);
-      } catch {
-        if (!cancelled) setError("Couldn't generate the card image. Try again.");
-      }
+    };
+    reset();
+  }, [open, avatarUrl, username, quizTitle, score, correct, total, streak]);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = wrapperRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width) setScale(width / CARD_SIZE);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open]);
+
+  const generatePng = useCallback(async () => {
+    if (!cardRef.current) return null;
+    try {
+      const dataUrl = await toPng(cardRef.current, {
+        width: CARD_SIZE,
+        height: CARD_SIZE,
+        pixelRatio: 2,
+        cacheBust: true,
+      });
+      setPngUrl(dataUrl);
+      return dataUrl;
+    } catch {
+      setError("Couldn't prepare the download — you can still screenshot the card above.");
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open || !avatarSettled || pngUrl) return;
+    const run = async () => {
+      setPreparing(true);
+      await generatePng();
+      setPreparing(false);
     };
     run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, username, avatarUrl, quizTitle, score, correct, total, streak]);
+  }, [open, avatarSettled, pngUrl, generatePng]);
 
   if (!open) return null;
 
-  const getBlob = (): Promise<Blob | null> =>
-    new Promise((resolve) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return resolve(null);
-      canvas.toBlob((blob) => resolve(blob), "image/png");
-    });
+  const ensurePng = async (): Promise<string | null> => {
+    if (pngUrl) return pngUrl;
+    setPreparing(true);
+    const result = await generatePng();
+    setPreparing(false);
+    return result;
+  };
 
   const handleDownload = async () => {
-    const blob = await getBlob();
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
+    const dataUrl = await ensurePng();
+    if (!dataUrl) return;
     const a = document.createElement("a");
-    a.href = url;
+    a.href = dataUrl;
     a.download = `quizzx-${quizTitle.replace(/\s+/g, "_").slice(0, 40)}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
   };
 
   const handleShare = async () => {
-    const blob = await getBlob();
-    if (!blob) return;
+    const dataUrl = await ensurePng();
+    if (!dataUrl) return;
+    const blob = await (await fetch(dataUrl)).blob();
     const file = new File([blob], "quizzx-result.png", { type: "image/png" });
     const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };
     if (nav.canShare?.({ files: [file] })) {
@@ -93,30 +126,48 @@ export function ShareCardModal({ open, onClose, username, avatarUrl, quizTitle, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/70">
-      <div className="card-tactile bg-white max-w-md w-full p-5 relative max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute top-3 right-3 btn-tactile bg-coral text-white p-1.5" title="Close">
+      <div className="card-tactile bg-white max-w-lg w-full p-5 relative max-h-[90vh] overflow-y-auto">
+        <button onClick={onClose} className="absolute top-3 right-3 btn-tactile bg-coral text-white p-1.5 z-10" title="Close">
           <X size={16} />
         </button>
         <h3 className="font-display text-xl mb-4 flex items-center gap-2">
           <ImageIcon size={20} /> Shareable Result Card
         </h3>
 
-        <div className="rounded-[var(--radius-card-sm)] overflow-hidden border-2 border-ink/10 bg-cream flex items-center justify-center min-h-[280px]">
-          {!ready && !error && <p className="font-accent font-bold text-sm animate-pulse p-8">Generating card…</p>}
-          {error && <p className="font-accent font-bold text-sm text-coral text-center p-8">{error}</p>}
-          <canvas ref={canvasRef} className={`w-full h-auto ${ready ? "" : "hidden"}`} />
+        <div ref={wrapperRef} className="relative w-full rounded-[var(--radius-card-sm)] overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
+          <div style={{ width: CARD_SIZE, height: CARD_SIZE, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+            <Tilt rotationFactor={6} className="relative">
+              <ShareCardFace
+                ref={cardRef}
+                username={username}
+                avatarUrl={avatarUrl}
+                quizTitle={quizTitle}
+                score={score}
+                correct={correct}
+                total={total}
+                streak={streak}
+                avatarFailed={avatarFailed}
+                onAvatarLoad={() => setAvatarSettled(true)}
+                onAvatarError={() => {
+                  setAvatarFailed(true);
+                  setAvatarSettled(true);
+                }}
+              />
+            </Tilt>
+          </div>
+          {!avatarSettled && <div className="shimmer-overlay" />}
         </div>
 
-        {ready && (
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <button onClick={handleDownload} className="btn-tactile bg-blue text-white justify-center py-3">
-              <Download size={18} /> Download
-            </button>
-            <button onClick={handleShare} disabled={sharing} className="btn-tactile bg-green justify-center py-3 disabled:opacity-60">
-              <Share2 size={18} /> {sharing ? "Sharing…" : "Share"}
-            </button>
-          </div>
-        )}
+        {error && <p className="text-sm font-accent font-bold text-coral text-center mt-3">{error}</p>}
+
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <button onClick={handleDownload} disabled={preparing} className="btn-tactile bg-blue text-white justify-center py-3 disabled:opacity-60">
+            <Download size={18} /> {preparing && !pngUrl ? "Preparing…" : "Download"}
+          </button>
+          <button onClick={handleShare} disabled={sharing || preparing} className="btn-tactile bg-green justify-center py-3 disabled:opacity-60">
+            <Share2 size={18} /> {sharing ? "Sharing…" : "Share"}
+          </button>
+        </div>
       </div>
     </div>
   );
