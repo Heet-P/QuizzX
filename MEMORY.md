@@ -1291,12 +1291,38 @@ Collected in one place since they're each individually easy to hit again:
    description + color palette) to a `svg_request.md` file for the user to
    commission real artwork, rather than falling back to an emoji or a
    vague/wrong icon.
+   **One deliberate exception (2026-07-23)**: the shareable result card
+   (`components/quiz/ShareCardFace.tsx`) uses emoji (👑 🔥 ⭐ 🌐) because it
+   was built to match a reference design the user hand-authored and supplied
+   directly (`public/shareCard/`), which itself used emoji throughout — a
+   Duolingo/Strava-style social share image is a different context from the
+   app's own interactive chrome, and the user's own reference is the
+   strongest possible signal for that one asset. This is NOT a reopening of
+   the general rule — every other UI surface still gets Lucide icons only.
+   Flag it if touching this file again in case the user actually wants icons
+   there too; don't assume the exception silently extends elsewhere.
 10. **This is a structural-migration project with an explicitly reversed
     "don't redesign" instruction** (Section 5.5) — if any future instruction
     seems to contradict "preserve v1 UI exactly," that's not a
     contradiction to flag, it's already been explicitly superseded. Don't
     revert redesign work citing the original brief; the redesign is the
     current, standing instruction.
+11. **A caught error inside a Prisma interactive transaction (`$transaction(async tx => ...)`) does NOT let you keep using that transaction.**
+    Postgres aborts the *entire* transaction the instant any single
+    statement errors — including an ordinary unique-constraint violation —
+    and every subsequent statement on that same connection throws `25P02:
+    current transaction is aborted` until a rollback, regardless of whether
+    the JS-level error got caught. This bit `awardAchievements` in
+    `app/api/submissions/route.ts` (Section 18/19 — real 500s in
+    production-like testing, not caught by `npm run build`): a per-slug
+    `try { tx.userAchievement.create() } catch (P2002) {}` loop worked fine
+    for the *first* already-earned achievement but broke every query after
+    it in the same transaction. Fix pattern: never rely on catching a
+    constraint violation mid-transaction — pre-check with a `findMany`
+    first, or use `createMany({ skipDuplicates: true })` (Postgres's native
+    `ON CONFLICT DO NOTHING`, which never raises an error at all). Watch for
+    this same shape (try/catch around a `create()`/unique field inside any
+    `$transaction` callback) anywhere else in the codebase.
 
 ---
 
