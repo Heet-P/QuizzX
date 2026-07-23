@@ -33,6 +33,26 @@ const PARTICLES = [
   { x: 93, size: 4, delay: 1.6, duration: 2.5 },
 ];
 
+// Waypoints matching the reference's "how full" percentages (their demo
+// hardcoded 3 states — 0/50/100 — as separate CSS classes; we have a
+// continuous fill, so these are the equivalent in-between stops for the
+// same fast/steady/slow easing curve used elsewhere in this file).
+const FILL_WAYPOINTS = [0, 62, 94, 100];
+// clip-path Y: 110% (fully below viewport, nothing visible) down to ~8%
+// (covers nearly the whole screen) — mirrors the reference's
+// `.wave-below._0/_50/_100` clip-path values, generalized to a continuous
+// range instead of 3 fixed classes.
+const CLIP_Y = FILL_WAYPOINTS.map((p) => 110 - p * 1.02);
+// wave background-position Y sits ~10-13 points "ahead" (higher up) of the
+// clip line, same gap the reference's own wave/_0/_50/_100 values have
+// relative to their paired wave-below values — the tiled texture is what
+// visually bridges the flat clip edge into a wavy crest.
+const WAVE_Y = FILL_WAYPOINTS.map((p) => 110 - p * 1.15);
+
+function clipPolygon(y: number): string {
+  return `polygon(0% 110%, 0% ${y}%, 110% ${y}%, 110% 110%)`;
+}
+
 const CONFETTI_COLORS = ["#ffd200", "#2e5bff", "#ff4b36", "#8b5cf6", "#ff9500", "#ffffff"];
 // angle (degrees around the burst center), distance (px), end rotation (deg), start delay (s)
 const CONFETTI = [
@@ -111,49 +131,65 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
 
   const isWaving = phase === "waiting";
 
+  // Filling phase animates through the waypoints (custom fast/steady/slow
+  // easing, same curve for both the wave texture and the solid clip-path
+  // reveal so they stay paired); waiting/revealing/reduced-motion just hold
+  // at "100% full" — always arrays (length 1 when holding) so the keyframe
+  // shape stays consistent instead of a number-or-array union.
+  const holdFull = phase === "waiting" || phase === "revealing" || reduceMotion;
+  const fillWaveY = holdFull ? [WAVE_Y[WAVE_Y.length - 1]] : WAVE_Y;
+  const fillClipY = holdFull ? [CLIP_Y[CLIP_Y.length - 1]] : CLIP_Y;
+  const fillTransition = holdFull
+    ? { duration: phase === "filling" ? FILL_SECONDS : 0.2, ease: "easeInOut" as const }
+    : { duration: FILL_SECONDS, times: [0, 0.15, 0.85, 1], ease: ["easeOut", "linear", "easeIn"] as ("easeOut" | "linear" | "easeIn")[] };
+
   return (
     <div className={styles.overlay}>
       <div className={styles.blocker} />
+      {/* The whole stage stays full-screen the entire time (unlike a
+          height-animated container) — "how full" is expressed purely via
+          the clip-path reveal below, matching the reference technique. Only
+          the "revealing" slide-away moves this container at all. */}
       <motion.div
-        className={styles.fillWrap}
-        initial={{ height: "0%", y: "0%" }}
-        animate={
-          phase === "revealing"
-            ? { height: "100%", y: "-100%" }
-            : phase === "waiting"
-              ? { height: "100%", y: "0%" }
-              : reduceMotion
-                ? { height: "100%", y: "0%" }
-                : { height: ["0%", "62%", "94%", "100%"], y: "0%" }
-        }
-        transition={
-          phase === "revealing"
-            ? { duration: 0.7, ease: "easeInOut" }
-            : phase === "waiting"
-              ? { duration: 0.2 }
-              : reduceMotion
-                ? { duration: FILL_SECONDS, ease: "easeInOut" }
-                : { duration: FILL_SECONDS, times: [0, 0.15, 0.85, 1], ease: ["easeOut", "linear", "easeIn"] }
-        }
+        className={styles.waveStage}
+        initial={{ y: "0%" }}
+        animate={{ y: phase === "revealing" ? "-100%" : "0%" }}
+        transition={phase === "revealing" ? { duration: 0.7, ease: "easeInOut" } : { duration: 0 }}
         onAnimationComplete={() => {
           if (phase === "revealing") onRevealComplete();
         }}
       >
-        <div className={reduceMotion ? styles.fillBodyFlat : styles.fillBody}>
-          {!reduceMotion && (
-            <>
-              <div className={`${styles.waveTexture} ${styles.waveTextureA}`} />
-              <div className={`${styles.waveTexture} ${styles.waveTextureB}`} />
+        {!reduceMotion && (
+          <>
+            <motion.div
+              className={`${styles.waveTexture} ${styles.waveTextureA}`}
+              initial={{ backgroundPositionY: `${WAVE_Y[0]}%` }}
+              animate={{ backgroundPositionY: fillWaveY.map((v) => `${v}%`) }}
+              transition={fillTransition}
+            />
+            <motion.div
+              className={`${styles.waveTexture} ${styles.waveTextureB}`}
+              initial={{ backgroundPositionY: `${WAVE_Y[0]}%` }}
+              animate={{ backgroundPositionY: fillWaveY.map((v) => `${v}%`) }}
+              transition={fillTransition}
+            />
+          </>
+        )}
 
-              {PARTICLES.map((p, i) => (
-                <div
-                  key={i}
-                  className={styles.bubble}
-                  style={{ left: `${p.x}%`, width: p.size, height: p.size, animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s` }}
-                />
-              ))}
-            </>
-          )}
+        <motion.div
+          className={reduceMotion ? styles.fillBodyFlat : styles.fillBody}
+          initial={{ clipPath: clipPolygon(CLIP_Y[0]) }}
+          animate={{ clipPath: fillClipY.map((v) => clipPolygon(v)) }}
+          transition={fillTransition}
+        >
+          {!reduceMotion &&
+            PARTICLES.map((p, i) => (
+              <div
+                key={i}
+                className={styles.bubble}
+                style={{ left: `${p.x}%`, width: p.size, height: p.size, animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s` }}
+              />
+            ))}
 
           {phase === "revealing" && success && !reduceMotion && (
             <div className={styles.confettiBurst}>
@@ -174,31 +210,31 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
               ))}
             </div>
           )}
+        </motion.div>
 
-          <div className={styles.centerText}>
-            <AnimatedNumber
-              value={targetPercent}
-              springOptions={{ duration: 1.6, bounce: 0 }}
-              format={(v) => `${Math.round(Math.min(100, Math.max(0, v)))}%`}
-              className={styles.percentNumber}
-            />
-            {isWaving ? (
-              <div className={styles.waitingText}>
-                <p>Calculating your results</p>
-                <span className={styles.dots}>
-                  <span className={styles.dot} style={{ animationDelay: "0s" }} />
-                  <span className={styles.dot} style={{ animationDelay: "0.15s" }} />
-                  <span className={styles.dot} style={{ animationDelay: "0.3s" }} />
-                </span>
-              </div>
-            ) : (
-              showLocked && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className={styles.lockedText}>
-                  <Lock size={22} /> Answers Locked
-                </motion.div>
-              )
-            )}
-          </div>
+        <div className={styles.centerText}>
+          <AnimatedNumber
+            value={targetPercent}
+            springOptions={{ duration: 1.6, bounce: 0 }}
+            format={(v) => `${Math.round(Math.min(100, Math.max(0, v)))}%`}
+            className={styles.percentNumber}
+          />
+          {isWaving ? (
+            <div className={styles.waitingText}>
+              <p>Calculating your results</p>
+              <span className={styles.dots}>
+                <span className={styles.dot} style={{ animationDelay: "0s" }} />
+                <span className={styles.dot} style={{ animationDelay: "0.15s" }} />
+                <span className={styles.dot} style={{ animationDelay: "0.3s" }} />
+              </span>
+            </div>
+          ) : (
+            showLocked && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className={styles.lockedText}>
+                <Lock size={22} /> Answers Locked
+              </motion.div>
+            )
+          )}
         </div>
       </motion.div>
     </div>

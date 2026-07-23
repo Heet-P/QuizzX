@@ -12,15 +12,31 @@ import { questionType, type QuizQuestion, type QuestionAnswer, type MatchPair } 
  * Resolve an answer letter (A/B/C/D) to the matching option string.
  * Strategy 1: option starts with an "A)" style prefix.
  * Strategy 2: positional index (A=0, B=1, C=2, D=3).
+ *
+ * Fixed 2026-07-23: real scoring bug found in an AI-generated quiz. This
+ * used to check only the *first character* of `letter` (`letter.trim()[0]`)
+ * against `/^[A-Z]$/`, which passes for ANY string starting with a letter —
+ * not just bare letter codes. AI-generated quizzes store the literal
+ * correct answer *text* (e.g. "Au", "Jupiter"), not a letter code; when
+ * that text happened to start with a letter, this silently misread it as a
+ * letter-code lookup and remapped it to the WRONG option positionally
+ * (e.g. correct answer "Au" got reinterpreted as letter "A" → options[0],
+ * which was "Ag" — an unrelated wrong option — so grading compared the
+ * user's genuinely-correct "Au" against "Ag" and scored it wrong). Now
+ * requires the *entire* trimmed string to be a bare letter (optionally
+ * with a trailing `)` or `.`, e.g. "A", "B)", "C.") before treating it as a
+ * letter code at all — multi-character answer text is never eligible,
+ * regardless of what its first character looks like.
  */
 export function mapAnswerLetter(letter: string | null | undefined, options: string[]): string | null {
   if (!letter || !Array.isArray(options) || options.length === 0) return null;
-  const l = letter.trim()[0]?.toUpperCase();
-  if (!l || !/^[A-Z]$/.test(l)) return null;
+  const m = letter.trim().match(/^([A-Za-z])[).]?$/);
+  if (!m) return null;
+  const l = m[1].toUpperCase();
 
   const prefixed = options.find((opt) => {
-    const m = opt.match(/^([A-Za-z])\)/);
-    return m && m[1].toUpperCase() === l;
+    const om = opt.match(/^([A-Za-z])\)/);
+    return om && om[1].toUpperCase() === l;
   });
   if (prefixed) return prefixed;
 

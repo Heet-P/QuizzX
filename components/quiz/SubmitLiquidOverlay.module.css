@@ -1,13 +1,15 @@
 /* Full-screen "locking in your answers" liquid submission animation.
-   The rising surface uses a tiled, repeating wave-texture image
-   (public/wave-green.svg, adapted from a user-supplied reference — a
-   circular "today's progress" widget that used the same repeat-x
-   background-image + horizontal-drift technique, here recolored green and
-   scaled up to a full-screen band instead of a small circle). Two copies
-   at different sizes/speeds/opacity/directions ride the top edge of the
-   already-rising .fillWrap (whose own height animation, driven from the
-   component, is what actually "fills the whole screen slowly" — the wave
-   layers are purely the surface decoration on top of that). */
+   More faithfully ported from the user's reference this time (a circular
+   "today's progress" widget): "how full" it looks is driven by a
+   `clip-path` reveal on a full-screen `.fillBody` layer (not a growing
+   container's `height`, which is what earlier attempts here used) — same
+   technique as the reference's `.wave-below` + its per-percentage
+   `clip-path` classes, just continuous instead of 3 fixed states. A tiled
+   wave texture (public/wave-green.svg) rides the same line via an animated
+   `background-position-y`, mirroring the reference's paired `.wave` +
+   `.wave-below`. Only the "revealing" phase ever moves `.waveStage` itself
+   (a slide-up reveal) — the fill/wave animations only ever touch
+   clip-path/background-position, never layout size. */
 
 .overlay {
   position: fixed;
@@ -20,12 +22,9 @@
   inset: 0;
 }
 
-.fillWrap {
+.waveStage {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: visible;
+  inset: 0;
 }
 
 .fillBody {
@@ -40,25 +39,21 @@
   background: #22c55e;
 }
 
-/* Tiled wave texture riding the rising fill's surface. Sits partly above
-   the flat top edge of .fillWrap (negative top offset) so the wavy crest
-   pokes above the solid body, same positioning idea as the reference's
-   wave-vs-wave-below layering, just achieved with a fixed-position strip
-   instead of independently animating background-position for the fill
-   itself (.fillWrap's own height animation already handles "how full" it
-   is — these layers are only ever the surface texture). */
+/* Tiled wave texture — `repeat-x` only (no vertical repeat), so it only
+   ever shows as a single ~60-90px band at whatever `background-position-y`
+   currently is, i.e. exactly at the "surface line" the clip-path is
+   revealing up to. Full `inset:0` sizing is deliberate: the element must
+   span the whole animatable range so the Y-position keeps meaning the same
+   thing throughout the fill, not just a fixed nearby strip. */
 .waveTexture {
   position: absolute;
-  left: 0;
-  right: 0;
+  inset: 0;
   background-image: url("/wave-green.svg");
   background-repeat: repeat-x;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
 }
 .waveTextureA {
-  top: -50px;
-  height: 90px;
   background-size: 360px 90px;
   opacity: 0.55;
   animation-name: wave-slosh-a;
@@ -66,8 +61,6 @@
   animation-direction: reverse;
 }
 .waveTextureB {
-  top: -28px;
-  height: 60px;
   background-size: 240px 60px;
   opacity: 0.9;
   animation-name: wave-slosh-b;

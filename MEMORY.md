@@ -1981,3 +1981,67 @@ again:
 - Rendered inside `.centerText`, which changed from a single centered child
   to `flex-direction: column` with a gap, since the percent number and the
   existing "Answers Locked"/"Calculating…" line now show at the same time.
+
+---
+
+## 24. Real Scoring Bug Fix (AI-Generated Quizzes) + Submission-Overlay Rework #2 (2026-07-23, later still)
+
+**24.1 — Real grading bug, found and verified against live DB data** (not
+guessed): AI-generated quizzes were being scored one point lower than they
+should — confirmed by fetching the actual quiz + submission rows and
+manually replaying the grading logic. Root cause: `mapAnswerLetter` (in
+`lib/answer-matching.ts`) is meant to resolve a *bare letter code*
+("A"/"B"/"C"/"D") to an option string, for regex-parsed quizzes whose
+answer field really is just a letter. It only ever checked
+`letter.trim()[0]` — the first character — against `/^[A-Z]$/`, which
+passes for *any* string that starts with a letter, not just actual bare
+letter codes. AI-generated quizzes store the literal correct answer text
+(e.g. `"Au"`, `"Jupiter"`) as `answer`, not a letter — so when that text
+started with a letter, `isAnswerMatch` (used by `scoreQuestion` for every
+mcq_single grade) silently misread it as a positional letter lookup and
+compared the user's genuinely-correct answer against the WRONG option
+(e.g. correct answer "Au" got reinterpreted as letter "A" → `options[0]`,
+an unrelated option — so a user who correctly answered "Au" was graded
+against "Ag" and marked wrong). Fixed by requiring the *entire* trimmed
+string to be a bare letter (optionally with a trailing `)` or `.`) before
+`mapAnswerLetter` treats it as a letter code at all. Verified with a
+throwaway script (not committed) that recomputed every affected
+submission's score with both the old and new logic — old logic exactly
+reproduced the wrong stored scores, new logic produced the objectively
+correct ones. **Also corrected the 3 already-stored submissions** this had
+affected (scores bumped from 3→4 and 3→5; one affected user's cached
+`users.score` best-score was checked too, though none needed bumping since
+neither correction exceeded their existing cached best). mcq_multi/
+fill_blank/match_columns were never affected — none of their scoring
+functions call `mapAnswerLetter`.
+
+**24.2 — Submission overlay reworked again**, per the user resupplying the
+same wave/circle-fill reference and saying the previous port (Section 22)
+"is not exact." The real gap: Sections 19-22 all represented "how full" via
+an animated **container `height`** (0%→100%, bottom-anchored), with the
+wave texture just riding that container's top edge. The reference's actual
+technique is different and doesn't grow any container at all — a
+fixed-size box reveals more of a solid-color layer via an animated
+**`clip-path`**, with a separately-animated tiled wave texture's
+`background-position-y` tracking the same line. `SubmitLiquidOverlay.tsx`
+now matches that: `.waveStage` is always full-screen (never resizes); a
+`.fillBody`/`.fillBodyFlat` layer's `clipPath` animates through
+`polygon(0% 110%, 0% Y%, 110% Y%, 110% 110%)` waypoints (`CLIP_Y`, from
+110% "nothing visible" down to ~8% "covers almost everything"), and the
+`.waveTexture` layers' `backgroundPositionY` animates through a parallel
+`WAVE_Y` waypoint set that sits ~10-13 points "ahead" (higher) of the clip
+line — mirroring the gap the reference's own paired `.wave`/`.wave-below`
+values have. Both use the *same* fast/steady/slow waypoint timing as
+before (`[0, 62, 94, 100]` → `times: [0, 0.15, 0.85, 1]`). The "revealing"
+slide-away is now cleanly decoupled: only `.waveStage`'s own `y` transform
+(`0% → -100%`) ever moves anything for that phase; the fill/wave layers
+just hold at their fully-filled clip/position values throughout waiting
+and revealing. `fillWaveY`/`fillClipY` are always arrays (length 1 when
+just "holding" at a value) specifically to avoid a `number | number[]`
+union type fighting with Framer's keyframe typing.
+
+Neither of these has been visually/functionally verified in a live browser
+by the agent (Section 9's standing note) — flagged to the user to confirm
+real quiz scores now compute correctly end-to-end (not just via the
+verification script) and that the reworked fill now actually looks like
+the reference.
