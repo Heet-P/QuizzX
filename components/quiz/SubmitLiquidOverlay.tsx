@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Lock } from "lucide-react";
+import { AnimatedNumber } from "@/components/core/animated-number";
 import styles from "./SubmitLiquidOverlay.module.css";
 
 export type SubmitPhase = "idle" | "filling" | "waiting" | "revealing";
@@ -65,6 +66,7 @@ const CONFETTI = [
 export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: SubmitLiquidOverlayProps) {
   const reduceMotion = useReducedMotion();
   const [showLocked, setShowLocked] = useState(false);
+  const [targetPercent, setTargetPercent] = useState(0);
 
   useEffect(() => {
     if (phase !== "filling") {
@@ -74,6 +76,20 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
     }
     const timer = setTimeout(() => setShowLocked(true), FILL_SECONDS * 1000 * 0.85);
     return () => clearTimeout(timer);
+  }, [phase]);
+
+  // Cosmetic count-up only — deliberately not tied to the actual fill
+  // height/DOM measurement, per explicit user request ("it need not be
+  // accurate but it needs to be 0-100"). Tuned to visually settle around
+  // the same ~1.8s as the liquid fill via the spring's own duration below.
+  useEffect(() => {
+    if (phase === "idle") {
+      const reset = () => setTargetPercent(0);
+      reset();
+      return;
+    }
+    const start = () => setTargetPercent(100);
+    start();
   }, [phase]);
 
   // Disable scrolling and soft-block back navigation for the whole overlay
@@ -160,6 +176,12 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
           )}
 
           <div className={styles.centerText}>
+            <AnimatedNumber
+              value={targetPercent}
+              springOptions={{ duration: 1.6, bounce: 0 }}
+              format={(v) => `${Math.round(Math.min(100, Math.max(0, v)))}%`}
+              className={styles.percentNumber}
+            />
             {isWaving ? (
               <div className={styles.waitingText}>
                 <p>Calculating your results</p>

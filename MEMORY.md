@@ -1946,3 +1946,38 @@ Not yet visually verified in a live browser by the agent (Section 9's
 standing note, same recurring caveat) — flagged to the user to confirm the
 review screen renders/scores correctly for all 4 question types and that
 the new wave-texture surface looks right.
+
+---
+
+## 23. Cosmetic 0-100% Count-Up on the Submission Overlay (2026-07-23, later still)
+
+Added a large bold percentage number to `SubmitLiquidOverlay.tsx`, per an
+explicit user request with reference code (an "Animate UI"-style
+`AnimatedNumber` + `useInView` demo built on the newer standalone `motion`
+package). Two adaptation decisions worth knowing if this file is touched
+again:
+
+- **New `components/core/animated-number.tsx`** — same situation as
+  `components/core/tilt.tsx` (Section 19): the referenced
+  `@/components/core/animated-number` isn't an installed package, so this
+  reimplements the idea (a `useSpring`-driven number that smoothly ticks
+  from its old value to a new one whenever the `value` prop changes) using
+  **`framer-motion`** (already a project dependency), not the `motion`
+  package the reference imported `useInView` from. `springOptions` is a
+  small locally-defined type, not imported from framer-motion — mirrors how
+  `tilt.tsx` already handles the same "no exported options type" situation.
+  Initial attempt spread generic `HTMLAttributes<HTMLSpanElement>` onto the
+  underlying `motion.span` and failed to typecheck (motion components
+  override several DOM event handler prop types, e.g. `onDrag`, with
+  incompatible Framer-specific signatures) — fixed by only accepting the
+  one prop actually needed (`className`), not a full HTML-attributes spread.
+- **Deliberately not tied to the actual fill height** — explicit user
+  instruction ("it need not be accurate but it needs to be 0-100"). A
+  `targetPercent` state flips straight to `100` the instant `phase` leaves
+  `"idle"` (i.e., the moment "filling" starts) and the spring
+  (`{ duration: 1.6, bounce: 0 }`) is what makes the number visually take
+  ~1.6s to count up — tuned to roughly track `FILL_SECONDS` (1.8s) by eye,
+  not by measuring the real DOM fill percentage anywhere.
+- Rendered inside `.centerText`, which changed from a single centered child
+  to `flex-direction: column` with a gap, since the percent number and the
+  existing "Answers Locked"/"Calculating…" line now show at the same time.

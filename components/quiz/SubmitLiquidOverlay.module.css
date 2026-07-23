@@ -155,9 +155,22 @@
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 18px;
   padding-top: 44px;
+}
+
+/* Cosmetic 0-100% count-up — see the component's header comment on why
+   it's deliberately not tied to the actual fill height. */
+.percentNumber {
+  font-family: var(--font-display), sans-serif;
+  font-size: 72px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  line-height: 1;
 }
 
 .lockedText,
