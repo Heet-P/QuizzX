@@ -1288,9 +1288,13 @@ Collected in one place since they're each individually easy to hit again:
 9. **Never use emoji in this app's UI, ever** — explicit, repeated,
    non-negotiable user directive from early in the redesign. Always Lucide
    SVG icons. If no suitable icon exists for a concept, log a request (name +
-   description + color palette) to a `svg_request.md` file for the user to
+   description + color palette) to **`svg.md`** (repo root) for the user to
    commission real artwork, rather than falling back to an emoji or a
-   vague/wrong icon.
+   vague/wrong icon. This convention previously used a file called
+   `svg_request.md` (Section 8/9 history above) which was deleted once its
+   one entry became irrelevant; the user explicitly asked for the file to be
+   named `svg.md` on 2026-07-23, so that's the current name — don't recreate
+   `svg_request.md`.
    **One deliberate exception (2026-07-23)**: the shareable result card
    (`components/quiz/ShareCardFace.tsx`) uses emoji (👑 🔥 ⭐ 🌐) because it
    was built to match a reference design the user hand-authored and supplied
@@ -1642,9 +1646,110 @@ Groq/NIM keys):
    underlying page button. Pure CSS (`.liquid-fill-btn`/`.liquid-fill` +
    keyframes in `app/globals.css`) — rises to ~88-94% and wobbles there
    rather than claiming a false completion percentage, since there's no
-   known request duration to animate against. `QuizClient.tsx`'s
-   `handleAutoSubmit` no longer closes the confirm modal on click; it stays
-   open (Cancel disabled) until the request resolves — success swaps the
-   whole view via the existing `submitStatus` early-return, and the catch
-   block explicitly closes the modal on error so the user lands on the
-   existing "Retry Submission" screen.
+   known request duration to animate against.
+   **Superseded same day, later (Section 19)**: this button-level treatment
+   was replaced by a full-screen liquid submission overlay per a much more
+   detailed spec. `ConfirmModal`'s `loading`/`loadingLabel` props still
+   exist and still work (harmless, reusable for other confirmations), but
+   the quiz-submit call site in `QuizClient.tsx` no longer passes them —
+   `onConfirm` now just closes the modal and hands off entirely to
+   `SubmitLiquidOverlay`.
+
+---
+
+## 19. Share Card Polish + Full-Screen Liquid Submission Overlay (2026-07-23, later still)
+
+**19.1 — Share card fixes**, from a screenshot showing real problems with
+the Section 18 rewrite:
+- **Edges/corners getting cut**: the preview wrapper clipped the card
+  (`overflow: hidden`) to a box sized by CSS `aspect-ratio`, computed
+  separately from the `transform: scale()` used to shrink the 1200×1200
+  card down to preview size — any mismatch between those two independently-
+  computed sizes clipped the rounded corners/shadow. Fixed in
+  `ShareCardModal.tsx` by sizing the middle wrapper box in JS from the exact
+  same `scale` value used for the transform (`CARD_SIZE * scale` for both
+  width and height), and removing the clip entirely — nothing needs to be
+  clipped once both boxes are guaranteed to match.
+- **White/cream stat boxes looked bad** against the colorful gradient
+  background — changed `.stats` in `ShareCard.module.css` to a translucent
+  dark-ink glass panel (`rgba(20,18,15,0.82)`) with light text, matching the
+  card's dark footer instead of clashing with it.
+- **Reveal shimmer on open**: added a ~1.2s one-time shimmer sweep when the
+  modal first opens (`revealShimmer` state + timer in `ShareCardModal.tsx`),
+  layered on top of (not replacing) the existing avatar-loading shimmer.
+- **`svg.md`** (repo root, new file) — the standing "never use emoji"
+  rule's logging convention, previously a file called `svg_request.md`
+  (deleted long ago, see Section 13 item 9's history) that the user
+  explicitly asked be named `svg.md` this time. Logs the 4 emoji currently
+  used in the share card (👑 🔥 ⭐ 🌐) as pending real-SVG commission
+  requests, each with a description + suggested color palette, per the
+  established convention.
+
+**19.2 — Full-screen liquid submission overlay**
+(`components/quiz/SubmitLiquidOverlay.tsx` + `.module.css`), built from a
+long, detailed user spec ("I'm locking in your answers", Apple/Duolingo/
+Strava/Linear-level polish). Replaces the button-level liquid-fill
+(Section 18 item 6) for the actual quiz-submit flow. Key mechanics, since
+none of this is obvious from a quick read of the component:
+
+- **State machine lives in `QuizClient.tsx`, not the overlay** —
+  `submitPhase: "idle" | "filling" | "waiting" | "revealing"` plus a
+  separate `revealed` boolean that, once set `true` (inside
+  `onRevealComplete`, alongside resetting `submitPhase` back to `"idle"` in
+  the same batch), **never resets**. The overlay component itself is
+  presentational, driven purely by the `phase` prop — it owns no timing
+  decisions beyond its own internal 1.8s fill animation and the "waiting"
+  idle-wobble.
+- **Why `revealed` exists / why the two early-return gates changed**:
+  `if (submitStatus === "success" && revealed)` and the equivalent for
+  `"error"` (previously gated on `submitStatus` alone). This is the crux of
+  making the "reveal" look seamless: the underlying success/error screen
+  must NOT swap in the instant the backend responds (which can happen at
+  any point during the 1.8s fill/wait) — only once the green fill is fully
+  opaque (100% height) is it *safe* to invisibly swap the mounted content
+  underneath, and only the "revealing" phase (fill already at 100%, now
+  sliding off-screen) should ever expose that swap to the user. Gating
+  early-returns on `submitStatus` alone (like Section 18) would have let
+  the plain success/error screen flash in immediately on backend response,
+  well before the animation finished — defeating the entire point of the
+  spec ("continue animation until 1800ms" regardless of backend speed).
+- **Why the overlay is rendered from a single place, not duplicated in the
+  success/error branches**: an earlier design considered rendering the
+  overlay in multiple early-return branches so its "revealing" slide-away
+  could keep playing after the tree swapped to the success/error screen.
+  Rejected — swapping branches mid-animation unmounts and remounts the
+  `motion.div`, which resets its Framer Motion `initial` state and makes the
+  green fill visibly snap back to 0% before re-animating, a glaring glitch.
+  Instead, `revealed` flips true in the *same* batched update that resets
+  `submitPhase` to `"idle"`, so the overlay only ever lives in the main
+  quiz-taking return, unmounting cleanly right as (not animating a moment
+  after) the tree swaps to the revealed success/error screen underneath.
+- **Timing**: fixed 1.8s "filling" run every time, independent of backend
+  speed (a ref — not a dependency — holds the latest `submitStatus` so the
+  1.8s `setTimeout` doesn't restart if the backend responds mid-fill). If
+  the backend already responded by then, skip straight to "revealing"; if
+  not, hold at "waiting" (gentle wave wobble + "Calculating your results…"
+  + bouncing dots) until it does.
+- **Organic wave effect without canvas/WebGL** (per the spec's explicit
+  technical constraint): 3 stacked SVG wave paths, each doubled
+  horizontally and looped via `translateX(-50%)` at a different
+  duration/direction. No physics simulation — the classic "layered waves"
+  trick, where differing loop periods make the combined motion read as
+  alive/non-repetitive despite each individual layer being a simple seamless
+  loop.
+- **Particles use a fixed, deterministic position array**, not
+  `Math.random()` — new code shouldn't add another instance of the
+  "impure function during render" lint violation the app already has
+  pre-existing elsewhere (`ConfettiDots` in `ResultsClient.tsx`).
+- **`prefers-reduced-motion`**: `useReducedMotion()` swaps the wave/particle
+  visuals for a flat solid-color fill, keeping the exact same phase/timing
+  state machine (still respects the 1.8s minimum, still waits for the
+  backend, still reveals the same way) — only the decoration is simplified.
+- **Scoped out on purpose** (spec's own "Nice Details"/optional section):
+  no sound effect, no button distortion/reflection/surface-tension/splash
+  embellishments. These were explicitly marked optional polish in the spec;
+  cut for time, not forgotten — revisit if the user asks for more fidelity
+  here.
+- Not yet visually verified in a live browser by the agent (Section 9's
+  standing note) — flagged to the user to check the actual animation feel,
+  timing, and the reduced-motion fallback.

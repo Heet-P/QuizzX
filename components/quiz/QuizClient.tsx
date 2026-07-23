@@ -11,6 +11,7 @@ import { RulesScreen } from "./RulesScreen";
 import { QuizTimer } from "./QuizTimer";
 import { QuestionCard } from "./QuestionCard";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { SubmitLiquidOverlay, type SubmitPhase } from "./SubmitLiquidOverlay";
 import { useQuizCheating } from "@/hooks/useQuizCheating";
 import { useToast } from "@/components/Toast";
 import { apiFetch } from "@/lib/api-client";
@@ -78,7 +79,13 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
   const [currentQ, setCurrentQ] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle");
+  const [submitPhase, setSubmitPhase] = useState<SubmitPhase>("idle");
+  const [revealed, setRevealed] = useState(false);
   const [showRules, setShowRules] = useState(true);
+  const submitStatusRef = useRef(submitStatus);
+  useEffect(() => {
+    submitStatusRef.current = submitStatus;
+  }, [submitStatus]);
 
   const [needsPin, setNeedsPin] = useState(false);
   const [pinVerified, setPinVerified] = useState(false);
@@ -230,6 +237,27 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, toast, questions.length, quiz?.title, challengerInfo]);
+
+  // Full-screen submit animation state machine (SubmitLiquidOverlay owns the
+  // visuals, this owns the timing). "filling" always runs its own fixed
+  // 1.8s regardless of backend speed — read via a ref so this timer doesn't
+  // restart if submitStatus changes mid-fill, it only checks it once, at
+  // the end, to decide whether to move to "waiting" or straight to "revealing".
+  useEffect(() => {
+    if (submitPhase !== "filling") return;
+    const timer = setTimeout(() => {
+      setSubmitPhase(submitStatusRef.current === "idle" ? "waiting" : "revealing");
+    }, 1800);
+    return () => clearTimeout(timer);
+  }, [submitPhase]);
+
+  // If the backend was still pending when the fill finished ("waiting"),
+  // move on the moment it actually settles.
+  useEffect(() => {
+    if (submitPhase !== "waiting" || submitStatus === "idle") return;
+    const advance = () => setSubmitPhase("revealing");
+    advance();
+  }, [submitPhase, submitStatus]);
 
   const { tabSwitched, tabStrikes, isFullscreen, startQuiz: requestFullscreen, reEnterFullscreen } = useQuizCheating({
     quiz,
@@ -383,7 +411,7 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
     );
   }
 
-  if (submitStatus === "success") {
+  if (submitStatus === "success" && revealed) {
     return (
       <>
         {levelUpData && (
@@ -425,7 +453,7 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
     );
   }
 
-  if (submitStatus === "error") {
+  if (submitStatus === "error" && revealed) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-coral p-4">
         <div className="max-w-xl text-center">
@@ -437,6 +465,8 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
               setSubmitStatus("idle");
               setSubmitted(false);
               submittedRef.current = false;
+              setRevealed(false);
+              setSubmitPhase("filling");
               handleAutoSubmit();
             }}
             className="btn-tactile justify-center bg-white text-ink text-lg py-4 px-8 w-full"
@@ -501,10 +531,20 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
         message={`You've answered ${Object.keys(answers).length} of ${questions.length} questions. This cannot be undone.`}
         confirmLabel="Submit"
         cancelLabel="Keep Going"
-        loading={submitting}
-        loadingLabel="Submitting…"
-        onConfirm={handleAutoSubmit}
+        onConfirm={() => {
+          setShowSubmitConfirm(false);
+          setSubmitPhase("filling");
+          handleAutoSubmit();
+        }}
         onCancel={() => setShowSubmitConfirm(false)}
+      />
+
+      <SubmitLiquidOverlay
+        phase={submitPhase}
+        onRevealComplete={() => {
+          setRevealed(true);
+          setSubmitPhase("idle");
+        }}
       />
 
       <div className="mx-auto max-w-4xl">

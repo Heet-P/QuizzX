@@ -32,6 +32,7 @@ export function ShareCardModal({ open, onClose, username, avatarUrl, quizTitle, 
   const [preparing, setPreparing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [revealShimmer, setRevealShimmer] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -43,6 +44,16 @@ export function ShareCardModal({ open, onClose, username, avatarUrl, quizTitle, 
     };
     reset();
   }, [open, avatarUrl, username, quizTitle, score, correct, total, streak]);
+
+  // One-time sheen when the modal pops up, on top of (not instead of) the
+  // avatar-loading shimmer above — a small reveal flourish, per user request.
+  useEffect(() => {
+    if (!open) return;
+    const start = () => setRevealShimmer(true);
+    start();
+    const timer = setTimeout(() => setRevealShimmer(false), 1200);
+    return () => clearTimeout(timer);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -134,28 +145,35 @@ export function ShareCardModal({ open, onClose, username, avatarUrl, quizTitle, 
           <ImageIcon size={20} /> Shareable Result Card
         </h3>
 
-        <div ref={wrapperRef} className="relative w-full rounded-[var(--radius-card-sm)] overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
-          <div style={{ width: CARD_SIZE, height: CARD_SIZE, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-            <Tilt rotationFactor={6} className="relative">
-              <ShareCardFace
-                ref={cardRef}
-                username={username}
-                avatarUrl={avatarUrl}
-                quizTitle={quizTitle}
-                score={score}
-                correct={correct}
-                total={total}
-                streak={streak}
-                avatarFailed={avatarFailed}
-                onAvatarLoad={() => setAvatarSettled(true)}
-                onAvatarError={() => {
-                  setAvatarFailed(true);
-                  setAvatarSettled(true);
-                }}
-              />
-            </Tilt>
+        {/* No overflow-hidden here on purpose — clipping a rounded+shadowed
+            card to a separately-computed (CSS aspect-ratio) box is what was
+            cutting its corners/shadow off. The middle box below is sized in
+            JS from the exact same `scale` used for the transform, so it
+            always matches pixel-for-pixel; nothing needs to be clipped. */}
+        <div ref={wrapperRef} className="relative w-full py-6">
+          <div className="relative mx-auto" style={{ width: CARD_SIZE * scale, height: CARD_SIZE * scale }}>
+            <div style={{ position: "absolute", top: 0, left: 0, width: CARD_SIZE, height: CARD_SIZE, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+              <Tilt rotationFactor={6} className="relative">
+                <ShareCardFace
+                  ref={cardRef}
+                  username={username}
+                  avatarUrl={avatarUrl}
+                  quizTitle={quizTitle}
+                  score={score}
+                  correct={correct}
+                  total={total}
+                  streak={streak}
+                  avatarFailed={avatarFailed}
+                  onAvatarLoad={() => setAvatarSettled(true)}
+                  onAvatarError={() => {
+                    setAvatarFailed(true);
+                    setAvatarSettled(true);
+                  }}
+                />
+              </Tilt>
+            </div>
+            {(!avatarSettled || revealShimmer) && <div className="shimmer-overlay rounded-[36px]" />}
           </div>
-          {!avatarSettled && <div className="shimmer-overlay" />}
         </div>
 
         {error && <p className="text-sm font-accent font-bold text-coral text-center mt-3">{error}</p>}
