@@ -155,8 +155,17 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
           ) : (
             <div className={styles.waterBob}>
               <div className={styles.waterFlat} />
-              <div className={styles.blobSlideA} />
-              <div className={styles.blobSlideB} />
+              <svg className={styles.wavesSvg} viewBox="0 24 150 28" preserveAspectRatio="none" shapeRendering="auto">
+                <defs>
+                  <path id="quizzx-gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" />
+                </defs>
+                <g>
+                  <use href="#quizzx-gentle-wave" x="48" y="0" fill="rgba(110,231,183,0.7)" className={`${styles.waveLayer} ${styles.waveLayerA}`} />
+                  <use href="#quizzx-gentle-wave" x="48" y="3" fill="rgba(74,222,128,0.55)" className={`${styles.waveLayer} ${styles.waveLayerB}`} />
+                  <use href="#quizzx-gentle-wave" x="48" y="5" fill="rgba(34,197,94,0.5)" className={`${styles.waveLayer} ${styles.waveLayerC}`} />
+                  <use href="#quizzx-gentle-wave" x="48" y="7" fill="#15803d" className={`${styles.waveLayer} ${styles.waveLayerD}`} />
+                </g>
+              </svg>
             </div>
           )}
         </motion.div>

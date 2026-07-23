@@ -58,67 +58,65 @@
   }
 }
 
-/* Oversized (multiples of the viewport) so full rotation never uncovers a
-   corner gap. A fixed pixel height (not a viewport-relative one) so the
-   hump is a real, visible amplitude regardless of screen size — a shape
-   scaled to the viewport (as an earlier attempt used) has a curve radius
-   so large relative to the screen that it reads as almost perfectly flat.
-   Vertically centered ON the reference line (half above, half below) so
-   the crest pokes up above the solid body beneath it. */
-.blobSlideA,
-.blobSlideB {
+/* The classic layered "gentle wave" SVG technique (a single hand-drawn
+   double-hump path, reused 4x via <use> at staggered x/y offsets, each
+   scrolling horizontally at its own speed) — a real wave silhouette, not a
+   border-radius shape stretched thin. Bottom-anchored to the reference
+   line so it extends upward from it, its own path already fills solid
+   down to its own bottom edge, meeting .waterFlat below with no seam. */
+.wavesSvg {
   position: absolute;
-  left: 50%;
-  top: 0;
-  border-radius: 50%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  width: 100%;
+  height: 15vh;
+  min-height: 110px;
+  max-height: 170px;
 }
-.blobSlideA {
-  width: 220vw;
-  height: 130px;
-  margin-left: -110vw;
-  margin-top: -65px;
-  background: linear-gradient(160deg, #6ee7b7 0%, #22c55e 55%, #15803d 100%);
-  animation: slosh-a 9s ease-in-out infinite alternate;
+.waveLayer {
+  animation-name: wave-move-forever;
+  animation-timing-function: cubic-bezier(0.55, 0.5, 0.45, 0.5);
+  animation-iteration-count: infinite;
 }
-.blobSlideB {
-  width: 180vw;
-  height: 90px;
-  margin-left: -90vw;
-  margin-top: -50px;
-  opacity: 0.5;
-  background: linear-gradient(200deg, #bbf7d0 0%, #4ade80 80%);
-  animation: slosh-b 6.5s ease-in-out infinite alternate;
+/* Same durations/delays as the reference — foreground (fastest, most
+   transparent) to background (slowest, solid/opaque) reads as depth. */
+.waveLayerA {
+  animation-delay: -2s;
+  animation-duration: 7s;
 }
-/* Slow side-to-side drift (not a one-directional loop) — reads as water
-   gently sloshing back and forth rather than scrolling. */
-@keyframes slosh-a {
-  from {
-    transform: translateX(-6vw);
+.waveLayerB {
+  animation-delay: -3s;
+  animation-duration: 10s;
+}
+.waveLayerC {
+  animation-delay: -4s;
+  animation-duration: 13s;
+}
+.waveLayerD {
+  animation-delay: -5s;
+  animation-duration: 20s;
+}
+@keyframes wave-move-forever {
+  0% {
+    transform: translate3d(-90px, 0, 0);
   }
-  to {
-    transform: translateX(6vw);
-  }
-}
-@keyframes slosh-b {
-  from {
-    transform: translateX(5vw);
-  }
-  to {
-    transform: translateX(-5vw);
+  100% {
+    transform: translate3d(85px, 0, 0);
   }
 }
 
-/* Solid body beneath the blobs so there's never a gap between the wavy
-   crest and the rest of the "tank". Rendered BEHIND the blobs (earlier in
-   the DOM) — painting it in front, as an earlier attempt did, hides the
-   blobs' curvature entirely behind its own dead-flat top edge. */
+/* Solid body beneath the wave SVG so there's never a gap between its
+   bottom edge and the rest of the "tank". Same solid green as the wave's
+   own darkest/background layer for a seamless meeting line. */
 .waterFlat {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
   height: 220vh;
-  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+  background: #15803d;
 }
 /* Reduced-motion fallback: flush with the line, no crest to hide a seam. */
 .waterFlatReduced {
