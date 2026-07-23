@@ -32,6 +32,26 @@ const PARTICLES = [
   { x: 93, size: 4, delay: 1.6, duration: 2.5 },
 ];
 
+// Deterministic pseudo-random (sine-hash), computed once at module load —
+// not Math.random(), and not called during render, so it never trips the
+// "impure function during render" lint rule (same reasoning as PARTICLES
+// above). Gives the 128 gooey bubbles varied-looking size/timing without
+// actual per-render randomness.
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+const BUBBLE_COUNT = 128;
+/** Rising gooey "metaball" bubbles for the fill's surface — see the module CSS's header comment for the blur-filter technique. Adapted from a user-supplied reference. */
+const BUBBLES = Array.from({ length: BUBBLE_COUNT }, (_, i) => ({
+  size: 2 + seededRandom(i * 12.9898 + 1) * 4, // rem
+  distance: 6 + seededRandom(i * 78.233 + 2) * 4, // rem
+  position: -5 + seededRandom(i * 37.719 + 3) * 110, // %
+  time: 2 + seededRandom(i * 94.673 + 4) * 2, // s
+  delay: -1 * (2 + seededRandom(i * 15.234 + 5) * 2), // s
+}));
+
 const CONFETTI_COLORS = ["#ffd200", "#2e5bff", "#ff4b36", "#8b5cf6", "#ff9500", "#ffffff"];
 // angle (degrees around the burst center), distance (px), end rotation (deg), start delay (s)
 const CONFETTI = [
@@ -97,6 +117,16 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
 
   return (
     <div className={styles.overlay}>
+      {!reduceMotion && (
+        <svg aria-hidden="true" style={{ position: "absolute", width: 0, height: 0 }}>
+          <defs>
+            <filter id="liquid-blob">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+              <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="blob" />
+            </filter>
+          </defs>
+        </svg>
+      )}
       <div className={styles.blocker} />
       <motion.div
         className={styles.fillWrap}
@@ -126,16 +156,22 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
         <div className={reduceMotion ? styles.fillBodyFlat : styles.fillBody}>
           {!reduceMotion && (
             <>
-              <div className={`${styles.waveGroup} ${isWaving ? styles.waveGroupBreathe : ""}`}>
-                <svg className={`${styles.waveLayer} ${styles.waveA}`} viewBox="0 0 2400 220" preserveAspectRatio="none">
-                  <path d="M0,130 C150,50 300,210 450,130 C600,50 750,210 900,130 C1050,50 1200,130 1200,130 L1200,220 L0,220 Z M1200,130 C1350,50 1500,210 1650,130 C1800,50 1950,210 2100,130 C2250,50 2400,130 2400,130 L2400,220 L1200,220 Z" />
-                </svg>
-                <svg className={`${styles.waveLayer} ${styles.waveB}`} viewBox="0 0 2400 160" preserveAspectRatio="none">
-                  <path d="M0,90 C120,20 260,160 400,88 C540,20 680,160 820,88 C960,20 1100,90 1200,90 L1200,160 L0,160 Z M1200,90 C1320,20 1460,160 1600,88 C1740,20 1880,160 2020,88 C2160,20 2300,90 2400,90 L2400,160 L1200,160 Z" />
-                </svg>
-                <svg className={`${styles.waveLayer} ${styles.waveC}`} viewBox="0 0 2400 100" preserveAspectRatio="none">
-                  <path d="M0,55 C100,15 200,95 300,53 C400,15 500,95 600,53 C700,15 800,55 900,55 L1200,55 L1200,100 L0,100 Z M1200,55 C1300,15 1400,95 1500,53 C1600,15 1700,95 1800,53 C1900,15 2000,55 2100,55 L2400,55 L2400,100 L1200,100 Z" />
-                </svg>
+              <div className={styles.bubbleField}>
+                {BUBBLES.map((b, i) => (
+                  <span
+                    key={i}
+                    className={styles.blobBubble}
+                    style={
+                      {
+                        "--size": `${b.size}rem`,
+                        "--distance": `${b.distance}rem`,
+                        "--position": `${b.position}%`,
+                        "--time": `${b.time}s`,
+                        "--delay": `${b.delay}s`,
+                      } as CSSProperties
+                    }
+                  />
+                ))}
               </div>
 
               {PARTICLES.map((p, i) => (

@@ -1845,3 +1845,40 @@ Two separate but related fixes:
   (Section 9's standing note) — flagged to the user to actually try
   dragging a wire, confirm the shuffled order looks right, and check the
   crown/stat-box/quiz-label fixes render correctly.
+
+---
+
+## 21. Submission Overlay: Gooey Bubble Surface (2026-07-23, later still)
+
+Replaced the wave-curve surface texture (Section 19.2/20.4) with a "gooey
+metaball" bubble effect, adapted from a user-supplied CodePen-style
+reference (originally a decorative footer effect) — `SubmitLiquidOverlay.tsx`
++ `.module.css`.
+
+**How it works**: 128 small circles (`.blobBubble`) rise independently
+inside a thin `.bubbleField` strip pinned to the top edge of the rising
+`.fillWrap`, each animating via two CSS keyframes (`blob-bubble-move`
+raises it, `blob-bubble-size` shrinks it to nothing partway through its own
+cycle) with randomized-looking per-bubble size/speed/position/delay — but
+computed once from a **deterministic sine-hash** (`seededRandom`, module
+scope, not `Math.random()` and not called during render) rather than
+actual randomness, same reasoning as the existing `PARTICLES`/`CONFETTI`
+arrays. The key visual trick is the `.bubbleField`'s `filter:
+url(#liquid-blob)` — an SVG `feGaussianBlur` + `feColorMatrix` filter
+(defined inline in the component, skipped entirely under
+`prefers-reduced-motion`) that blurs the circles and re-thresholds the
+alpha channel, so overlapping bubbles visually melt into one continuous
+organic blob instead of reading as separate dots. Colored green
+(`#22c55e`) per explicit request, replacing the reference's original red.
+
+**What stayed the same**: the overall fill-to-100%-over-1.8s mechanic, the
+"waiting"/"revealing" phases, the small ambient `PARTICLES` (renamed
+nothing there — still called `.bubble`, a *different*, older, simpler
+"floating dot" effect than the new `.blobBubble`s; don't confuse the two
+class names when touching this file again), and the confetti burst — none
+of that changed, only the surface-texture technique did.
+
+Not yet visually verified in a live browser by the agent (Section 9's
+standing note, same caveat as Section 19/20) — flagged to the user to
+confirm the blob/gooey look actually renders as intended and performs
+acceptably with 128 animated elements + an SVG filter.

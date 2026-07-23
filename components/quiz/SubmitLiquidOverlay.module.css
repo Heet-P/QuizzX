@@ -1,8 +1,11 @@
 /* Full-screen "locking in your answers" liquid submission animation.
-   Organic layered-wave technique: 3 identical-period wave SVGs, each doubled
-   horizontally and looped via translateX(-50%) at a different duration/
-   direction, so their interference pattern reads as alive/non-repetitive
-   even though each individual layer is a simple seamless loop. */
+   The rising surface uses a gooey "metaball" bubble effect (adapted from a
+   user-supplied reference, originally a footer decoration) instead of drawn
+   wave curves: many small circles rise and shrink independently, and an SVG
+   `feGaussianBlur` + `feColorMatrix` filter (`#liquid-blob`, defined in the
+   component) blurs and re-thresholds them so overlapping circles visually
+   melt into one continuous organic blob instead of reading as separate
+   dots — the classic CSS "gooey" technique. */
 
 .overlay {
   position: fixed;
@@ -35,61 +38,54 @@
   background: #22c55e;
 }
 
-.waveLayer {
+/* The gooey rising surface — sits right at the top edge of .fillWrap.
+   `overflow: visible` lets bubbles poke up well above this thin strip
+   before they shrink away; the blur filter is what makes them melt
+   together instead of looking like a field of separate circles. */
+.bubbleField {
   position: absolute;
+  top: 0;
   left: 0;
-  width: 200%;
-  fill: #2dd36f;
+  right: 0;
+  height: 1rem;
+  overflow: visible;
+  filter: url(#liquid-blob);
 }
-
-/* Big, clearly-visible undulation across the whole width, not just a
-   sliver at the surface line — three layers of differing height/opacity/
-   speed so the combined motion reads as one large, alive body of water. */
-.waveA {
-  top: -170px;
-  height: 220px;
-  opacity: 0.45;
-  animation: wave-drift 8s linear infinite;
-}
-.waveB {
-  top: -115px;
-  height: 160px;
-  opacity: 0.65;
-  animation: wave-drift 5.4s linear infinite reverse;
-}
-.waveC {
-  top: -60px;
-  height: 100px;
-  opacity: 0.95;
-  animation: wave-drift 3.8s linear infinite;
-}
-
-@keyframes wave-drift {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-.waveGroup {
+.blobBubble {
   position: absolute;
-  inset: 0;
+  left: var(--position, 50%);
+  bottom: -4rem;
+  width: var(--size, 4rem);
+  height: var(--size, 4rem);
+  background: #22c55e;
+  border-radius: 100%;
+  transform: translate(-50%, 100%);
+  animation:
+    blob-bubble-size var(--time, 4s) ease-in infinite var(--delay, 0s),
+    blob-bubble-move var(--time, 4s) ease-in infinite var(--delay, 0s);
 }
-.waveGroupBreathe {
-  animation: wave-breathe 2.4s ease-in-out infinite;
-}
-@keyframes wave-breathe {
+@keyframes blob-bubble-size {
   0%,
-  100% {
-    transform: translateY(0);
+  75% {
+    width: var(--size, 4rem);
+    height: var(--size, 4rem);
   }
-  50% {
-    transform: translateY(-6px);
+  100% {
+    width: 0rem;
+    height: 0rem;
+  }
+}
+@keyframes blob-bubble-move {
+  0% {
+    bottom: -4rem;
+  }
+  100% {
+    bottom: var(--distance, 10rem);
   }
 }
 
+/* Small ambient floating particles, unrelated to the gooey surface above —
+   ordinary ascending dots for extra texture while filling. */
 .bubble {
   position: absolute;
   bottom: 0;
