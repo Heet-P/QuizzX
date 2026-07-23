@@ -1,20 +1,26 @@
 /* Full-screen "locking in your answers" liquid submission animation.
-   More faithfully ported from the user's reference this time (a circular
-   "today's progress" widget): "how full" it looks is driven by a
-   `clip-path` reveal on a full-screen `.fillBody` layer (not a growing
-   container's `height`, which is what earlier attempts here used) — same
-   technique as the reference's `.wave-below` + its per-percentage
-   `clip-path` classes, just continuous instead of 3 fixed states. A tiled
-   wave texture (public/wave-green.svg) rides the same line via an animated
-   `background-position-y`, mirroring the reference's paired `.wave` +
-   `.wave-below`. Only the "revealing" phase ever moves `.waveStage` itself
-   (a slide-up reveal) — the fill/wave animations only ever touch
-   clip-path/background-position, never layout size. */
+   Rebuilt to actually use the reference's technique: a rotating, off-round
+   ("blobby") shape bigger than its container, spinning continuously inside
+   an `overflow:hidden` box. Because a border-radius blob isn't a perfect
+   circle, its topmost point wobbles up and down as it spins — that wobble
+   IS the wave, with no separate wave-texture/background-position trick
+   needed. "How full" the water looks is just the blob's own `top` offset
+   (110% = fully below the screen/invisible, ~8% = covers almost everything)
+   animated once, top to bottom of a waypoint curve — mirrors the
+   reference's `.wave { top: 110% -> 0% }` exactly, just auto-playing
+   instead of hover-triggered, and layered two-deep for a richer look.
+   A slow separate up/down bob is layered underneath the spin for the
+   "breathing" surface motion. The percentage number is a hollow, bold,
+   dark-outlined glyph that always renders in full; a second copy of the
+   same text sits behind it, solid white, clipped from the bottom up by the
+   same waypoint curve driving the water — so the inside of the number
+   fills in lockstep with the background. */
 
 .overlay {
   position: fixed;
   inset: 0;
   z-index: 100;
+  overflow: hidden;
 }
 
 .blocker {
@@ -25,68 +31,106 @@
 .waveStage {
   position: absolute;
   inset: 0;
+  overflow: hidden;
 }
 
-.fillBody {
+/* Zero-height anchor line — its own animated `top` (set inline by Framer
+   Motion) is the single "how full" value; every child below is positioned
+   relative to this line, not to the stage's own box. */
+.waterLevel {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, #6ee7b7 0%, #22c55e 55%, #15803d 100%);
+  left: 0;
+  right: 0;
 }
 
-.fillBodyFlat {
+.waterBob {
   position: absolute;
   inset: 0;
+  animation: water-bob 4.5s ease-in-out infinite alternate;
+}
+
+@keyframes water-bob {
+  from {
+    transform: translateY(-7px);
+  }
+  to {
+    transform: translateY(7px);
+  }
+}
+
+/* Oversized (multiples of the viewport) so full rotation never uncovers a
+   corner gap. A fixed pixel height (not a viewport-relative one) so the
+   hump is a real, visible amplitude regardless of screen size — a shape
+   scaled to the viewport (as an earlier attempt used) has a curve radius
+   so large relative to the screen that it reads as almost perfectly flat.
+   Vertically centered ON the reference line (half above, half below) so
+   the crest pokes up above the solid body beneath it. */
+.blobSlideA,
+.blobSlideB {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  border-radius: 50%;
+}
+.blobSlideA {
+  width: 220vw;
+  height: 130px;
+  margin-left: -110vw;
+  margin-top: -65px;
+  background: linear-gradient(160deg, #6ee7b7 0%, #22c55e 55%, #15803d 100%);
+  animation: slosh-a 9s ease-in-out infinite alternate;
+}
+.blobSlideB {
+  width: 180vw;
+  height: 90px;
+  margin-left: -90vw;
+  margin-top: -50px;
+  opacity: 0.5;
+  background: linear-gradient(200deg, #bbf7d0 0%, #4ade80 80%);
+  animation: slosh-b 6.5s ease-in-out infinite alternate;
+}
+/* Slow side-to-side drift (not a one-directional loop) — reads as water
+   gently sloshing back and forth rather than scrolling. */
+@keyframes slosh-a {
+  from {
+    transform: translateX(-6vw);
+  }
+  to {
+    transform: translateX(6vw);
+  }
+}
+@keyframes slosh-b {
+  from {
+    transform: translateX(5vw);
+  }
+  to {
+    transform: translateX(-5vw);
+  }
+}
+
+/* Solid body beneath the blobs so there's never a gap between the wavy
+   crest and the rest of the "tank". Rendered BEHIND the blobs (earlier in
+   the DOM) — painting it in front, as an earlier attempt did, hides the
+   blobs' curvature entirely behind its own dead-flat top edge. */
+.waterFlat {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 220vh;
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+}
+/* Reduced-motion fallback: flush with the line, no crest to hide a seam. */
+.waterFlatReduced {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 220vh;
   background: #22c55e;
 }
 
-/* Tiled wave texture — `repeat-x` only (no vertical repeat), so it only
-   ever shows as a single ~60-90px band at whatever `background-position-y`
-   currently is, i.e. exactly at the "surface line" the clip-path is
-   revealing up to. Full `inset:0` sizing is deliberate: the element must
-   span the whole animatable range so the Y-position keeps meaning the same
-   thing throughout the fill, not just a fixed nearby strip. */
-.waveTexture {
-  position: absolute;
-  inset: 0;
-  background-image: url("/wave-green.svg");
-  background-repeat: repeat-x;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-.waveTextureA {
-  background-size: 360px 90px;
-  opacity: 0.55;
-  animation-name: wave-slosh-a;
-  animation-duration: 7s;
-  animation-direction: reverse;
-}
-.waveTextureB {
-  background-size: 240px 60px;
-  opacity: 0.9;
-  animation-name: wave-slosh-b;
-  animation-duration: 4.5s;
-}
-/* Shift by exactly one tile width each — seamless regardless of viewport
-   width, unlike a percentage shift (which is relative to container size,
-   not tile size, and would visibly jump for a repeating background). */
-@keyframes wave-slosh-a {
-  from {
-    background-position-x: 0;
-  }
-  to {
-    background-position-x: -360px;
-  }
-}
-@keyframes wave-slosh-b {
-  from {
-    background-position-x: 0;
-  }
-  to {
-    background-position-x: -240px;
-  }
-}
-
-/* Small ambient floating particles, unrelated to the gooey surface above —
+/* Small ambient floating particles, unrelated to the wave itself —
    ordinary ascending dots for extra texture while filling. */
 .bubble {
   position: absolute;
@@ -155,15 +199,36 @@
   padding-top: 44px;
 }
 
-/* Cosmetic 0-100% count-up — see the component's header comment on why
-   it's deliberately not tied to the actual fill height. */
+/* Hollow, always-visible percentage number: two exactly-overlapping copies
+   of the same live count-up text. The bottom copy is solid white, clipped
+   from the bottom up by the same waypoint curve as the water outside — so
+   its interior fills in lockstep. The top copy is the "glass" — transparent
+   fill, bold dark stroke, never clipped, always fully legible regardless of
+   how much has filled. */
+.percentWrap {
+  position: relative;
+  display: inline-block;
+}
+.percentClipWrap {
+  position: absolute;
+  inset: 0;
+}
 .percentNumber {
   font-family: var(--font-display), sans-serif;
   font-size: 72px;
   font-weight: 900;
-  color: #ffffff;
-  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   line-height: 1;
+  white-space: nowrap;
+}
+.percentNumberFill {
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+}
+.percentNumberOutline {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 4px rgba(6, 24, 15, 0.92);
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .lockedText,
