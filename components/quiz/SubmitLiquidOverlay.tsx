@@ -5,7 +5,12 @@ import { motion, useReducedMotion, useMotionValue, useTransform, animate } from 
 import { Lock } from "lucide-react";
 import styles from "./SubmitLiquidOverlay.module.css";
 
-export type SubmitPhase = "idle" | "filling" | "waiting" | "revealing";
+// "complete" sits between the fill finishing and the reveal starting — the
+// water is full, "Answers Locked" is showing, and it just holds there for
+// COMPLETE_HOLD_SECONDS before the parent moves on to "revealing". Entered
+// once the backend result is known, whether that happens right as the fill
+// finishes or only later (from "waiting").
+export type SubmitPhase = "idle" | "filling" | "waiting" | "complete" | "revealing";
 
 interface SubmitLiquidOverlayProps {
   phase: SubmitPhase;
@@ -15,7 +20,10 @@ interface SubmitLiquidOverlayProps {
   onRevealComplete: () => void;
 }
 
-const FILL_SECONDS = 2.4;
+// Exported so QuizClient's own phase-timing effects can't drift from these —
+// they used to be separately hardcoded and quietly fell out of sync.
+export const FILL_SECONDS = 3.5;
+export const COMPLETE_HOLD_SECONDS = 1;
 
 // Fixed, deterministic positions/timings (not Math.random) so this never
 // trips the "impure function during render" lint rule the rest of the app
@@ -86,13 +94,19 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
   const numberClip = useTransform(progress, (v) => clipPolygon(fillYFromProgress(v)));
 
   useEffect(() => {
-    if (phase !== "filling") {
-      const reset = () => setShowLocked(false);
-      reset();
+    if (phase === "filling") {
+      const timer = setTimeout(() => setShowLocked(true), FILL_SECONDS * 1000 * 0.85);
+      return () => clearTimeout(timer);
+    }
+    // "complete" holds at fully-full with the lock text showing — arm it
+    // immediately rather than waiting on filling's own (now-irrelevant) timer.
+    if (phase === "complete") {
+      const lock = () => setShowLocked(true);
+      lock();
       return;
     }
-    const timer = setTimeout(() => setShowLocked(true), FILL_SECONDS * 1000 * 0.85);
-    return () => clearTimeout(timer);
+    const reset = () => setShowLocked(false);
+    reset();
   }, [phase]);
 
   useEffect(() => {
@@ -103,13 +117,13 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
     if (phase === "filling") {
       // One smooth, unhurried rise for the whole fill — deliberately not a
       // fast-jump/crawl/fast-finish curve, per explicit "slow and smooth"
-      // feedback. The wave's own waviness comes entirely from the rotating
-      // blobs below, so the progress curve itself can stay simple.
+      // feedback. The wave's own waviness comes entirely from the SVG wave
+      // layers below, so the progress curve itself can stay simple.
       const controls = animate(progress, 100, { duration: reduceMotion ? 0.2 : FILL_SECONDS, ease: "easeInOut" });
       return () => controls.stop();
     }
-    // waiting / revealing: settle at fully-full even if the backend
-    // resolved before the fill's own 1.8s had finished on its own.
+    // waiting / complete / revealing: settle at fully-full even if the
+    // backend resolved before the fill's own animation had finished on its own.
     const controls = animate(progress, 100, { duration: 0.2, ease: "easeInOut" });
     return () => controls.stop();
   }, [phase, reduceMotion, progress]);
