@@ -248,7 +248,10 @@ export function ResultsClient({
           {challengeCopied ? "Link Copied!" : "Challenge a Friend"}
         </button>
 
-        <Link href={`/leaderboard?quizId=${id}`} className="btn-tactile justify-center bg-yellow py-3">
+        <Link
+          href={`/leaderboard?quizId=${id}`}
+          className={`btn-tactile justify-center bg-yellow py-3 ${!isPractice ? "sm:col-span-2" : ""}`}
+        >
           <Trophy size={18} /> View Leaderboard
         </Link>
 

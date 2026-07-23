@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { sanitizeQuestion } from "@/lib/quiz-sanitize";
+import { sanitizeQuestion, shuffleMatchColumnsRight } from "@/lib/quiz-sanitize";
+import { questionSeed } from "@/lib/seeded-shuffle";
 import type { QuizQuestion } from "@/types/quiz";
 
 // GET /api/rooms/:code — ported from RoomController.getRoom. Strips
@@ -24,7 +25,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
     return NextResponse.json({ error: "Room not found" }, { status: 404 });
   }
 
-  const questions = ((room.quiz.questions ?? []) as unknown as QuizQuestion[]).map((q) => sanitizeQuestion(q));
+  // Same room seed for every participant (not per-user) — everyone in a
+  // live room shares one synchronized view of each question. Match-columns'
+  // right column is always shuffled regardless — see
+  // lib/quiz-sanitize.ts's shuffleMatchColumnsRight doc comment.
+  const roomSeed = questionSeed(room.id, room.hostId ?? room.id);
+  const questions = ((room.quiz.questions ?? []) as unknown as QuizQuestion[]).map((q, i) =>
+    shuffleMatchColumnsRight(sanitizeQuestion(q), roomSeed + i + 1)
+  );
 
   return NextResponse.json({
     id: room.id,

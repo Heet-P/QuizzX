@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { seededShuffle, questionSeed } from "@/lib/seeded-shuffle";
-import { sanitizeQuestion, shuffleSanitizedQuestion } from "@/lib/quiz-sanitize";
+import { sanitizeQuestion, shuffleMcqOptions, shuffleMatchColumnsRight } from "@/lib/quiz-sanitize";
 import type { QuizQuestion, QuizSettings } from "@/types/quiz";
 
 // GET /api/quizzes/:id — ported from QuizController.getQuiz. Applies the
@@ -46,10 +46,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const isPractice = settings.timer === "none" && settings.tabSwitch === "disabled";
 
-  let result = questions.map((q) => sanitizeQuestion(q, isPractice));
-  if (settings.shuffleOptions) {
-    result = result.map((q, i) => shuffleSanitizedQuestion(q, seed + i + 1));
-  }
+  const result = questions.map((q, i) => {
+    let sanitized = sanitizeQuestion(q, isPractice);
+    const qSeed = seed + i + 1;
+    if (settings.shuffleOptions) sanitized = shuffleMcqOptions(sanitized, qSeed);
+    // Match-columns' right column is always shuffled — never optional, see
+    // lib/quiz-sanitize.ts's shuffleMatchColumnsRight doc comment.
+    sanitized = shuffleMatchColumnsRight(sanitized, qSeed);
+    return sanitized;
+  });
 
   return NextResponse.json({ id: quiz.id, title: quiz.title, settings: quiz.settings, questions: result });
 }

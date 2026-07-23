@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Lock } from "lucide-react";
 import styles from "./SubmitLiquidOverlay.module.css";
@@ -9,6 +9,8 @@ export type SubmitPhase = "idle" | "filling" | "waiting" | "revealing";
 
 interface SubmitLiquidOverlayProps {
   phase: SubmitPhase;
+  /** True once the backend has confirmed success — gates the confetti pop (never shown for errors). */
+  success: boolean;
   /** Fired once the "revealing" slide-away finishes — the parent should reset phase to "idle" here. */
   onRevealComplete: () => void;
 }
@@ -30,6 +32,26 @@ const PARTICLES = [
   { x: 93, size: 4, delay: 1.6, duration: 2.5 },
 ];
 
+const CONFETTI_COLORS = ["#ffd200", "#2e5bff", "#ff4b36", "#8b5cf6", "#ff9500", "#ffffff"];
+// angle (degrees around the burst center), distance (px), end rotation (deg), start delay (s)
+const CONFETTI = [
+  { angle: 0, dist: 260, rot: 120, delay: 0 },
+  { angle: 30, dist: 300, rot: -140, delay: 0.05 },
+  { angle: 60, dist: 240, rot: 200, delay: 0.02 },
+  { angle: 90, dist: 320, rot: -90, delay: 0.08 },
+  { angle: 120, dist: 260, rot: 160, delay: 0.03 },
+  { angle: 150, dist: 300, rot: -180, delay: 0.06 },
+  { angle: 180, dist: 250, rot: 100, delay: 0.01 },
+  { angle: 210, dist: 310, rot: -120, delay: 0.07 },
+  { angle: 240, dist: 270, rot: 220, delay: 0.04 },
+  { angle: 270, dist: 330, rot: -100, delay: 0.09 },
+  { angle: 300, dist: 260, rot: 140, delay: 0.02 },
+  { angle: 330, dist: 290, rot: -160, delay: 0.05 },
+].map((c, i) => {
+  const rad = (c.angle * Math.PI) / 180;
+  return { ...c, tx: Math.cos(rad) * c.dist, ty: Math.sin(rad) * c.dist, color: CONFETTI_COLORS[i % CONFETTI_COLORS.length] };
+});
+
 // Full-screen "I'm locking in your answers" submission animation — added
 // 2026-07-23 per an explicit, detailed spec, replacing the previous
 // button-level liquid-fill for the quiz-submit flow (ConfirmModal's
@@ -40,7 +62,7 @@ const PARTICLES = [
 // "Calculating your results…") -> revealing (slides the whole green layer
 // off the top of the screen, uncovering whatever the parent has already
 // swapped to underneath — see QuizClient's submitPhase-gated early returns).
-export function SubmitLiquidOverlay({ phase, onRevealComplete }: SubmitLiquidOverlayProps) {
+export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: SubmitLiquidOverlayProps) {
   const reduceMotion = useReducedMotion();
   const [showLocked, setShowLocked] = useState(false);
 
@@ -105,14 +127,14 @@ export function SubmitLiquidOverlay({ phase, onRevealComplete }: SubmitLiquidOve
           {!reduceMotion && (
             <>
               <div className={`${styles.waveGroup} ${isWaving ? styles.waveGroupBreathe : ""}`}>
-                <svg className={`${styles.waveLayer} ${styles.waveA}`} viewBox="0 0 2400 60" preserveAspectRatio="none">
-                  <path d="M0,40 C150,10 300,55 450,35 C600,15 750,55 900,35 C1050,15 1200,40 1200,40 L1200,60 L0,60 Z M1200,40 C1350,10 1500,55 1650,35 C1800,15 1950,55 2100,35 C2250,15 2400,40 2400,40 L2400,60 L1200,60 Z" />
+                <svg className={`${styles.waveLayer} ${styles.waveA}`} viewBox="0 0 2400 220" preserveAspectRatio="none">
+                  <path d="M0,130 C150,50 300,210 450,130 C600,50 750,210 900,130 C1050,50 1200,130 1200,130 L1200,220 L0,220 Z M1200,130 C1350,50 1500,210 1650,130 C1800,50 1950,210 2100,130 C2250,50 2400,130 2400,130 L2400,220 L1200,220 Z" />
                 </svg>
-                <svg className={`${styles.waveLayer} ${styles.waveB}`} viewBox="0 0 2400 42" preserveAspectRatio="none">
-                  <path d="M0,25 C120,5 260,38 400,24 C540,10 680,38 820,24 C960,10 1100,25 1200,25 L1200,42 L0,42 Z M1200,25 C1320,5 1460,38 1600,24 C1740,10 1880,38 2020,24 C2160,10 2300,25 2400,25 L2400,42 L1200,42 Z" />
+                <svg className={`${styles.waveLayer} ${styles.waveB}`} viewBox="0 0 2400 160" preserveAspectRatio="none">
+                  <path d="M0,90 C120,20 260,160 400,88 C540,20 680,160 820,88 C960,20 1100,90 1200,90 L1200,160 L0,160 Z M1200,90 C1320,20 1460,160 1600,88 C1740,20 1880,160 2020,88 C2160,20 2300,90 2400,90 L2400,160 L1200,160 Z" />
                 </svg>
-                <svg className={`${styles.waveLayer} ${styles.waveC}`} viewBox="0 0 2400 28" preserveAspectRatio="none">
-                  <path d="M0,16 C100,4 200,24 300,15 C400,6 500,24 600,15 C700,6 800,16 900,16 L1200,16 L1200,28 L0,28 Z M1200,16 C1300,4 1400,24 1500,15 C1600,6 1700,24 1800,15 C1900,6 2000,16 2100,16 L2400,16 L2400,28 L1200,28 Z" />
+                <svg className={`${styles.waveLayer} ${styles.waveC}`} viewBox="0 0 2400 100" preserveAspectRatio="none">
+                  <path d="M0,55 C100,15 200,95 300,53 C400,15 500,95 600,53 C700,15 800,55 900,55 L1200,55 L1200,100 L0,100 Z M1200,55 C1300,15 1400,95 1500,53 C1600,15 1700,95 1800,53 C1900,15 2000,55 2100,55 L2400,55 L2400,100 L1200,100 Z" />
                 </svg>
               </div>
 
@@ -124,6 +146,26 @@ export function SubmitLiquidOverlay({ phase, onRevealComplete }: SubmitLiquidOve
                 />
               ))}
             </>
+          )}
+
+          {phase === "revealing" && success && !reduceMotion && (
+            <div className={styles.confettiBurst}>
+              {CONFETTI.map((c, i) => (
+                <span
+                  key={i}
+                  className={styles.confettiPiece}
+                  style={
+                    {
+                      background: c.color,
+                      animationDelay: `${c.delay}s`,
+                      "--tx": `${c.tx}px`,
+                      "--ty": `${c.ty}px`,
+                      "--rot": `${c.rot}deg`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
           )}
 
           <div className={styles.centerText}>

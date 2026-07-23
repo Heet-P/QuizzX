@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { CheckCircle, XCircle, Bookmark, BookmarkCheck, Lock, Lightbulb } from "lucide-react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CheckCircle, XCircle, Bookmark, BookmarkCheck, Lock, Lightbulb, X } from "lucide-react";
 import {
   questionType,
   type SanitizedQuizQuestion,
@@ -232,32 +232,204 @@ function FillBlankBody({ question: _question, idx, answer, isLocked, onSelect }:
   );
 }
 
+// Vibrant, distinct wire colors cycling per left-item index — matches the
+// app's brand palette so the connections read as intentional, not random.
+const WIRE_COLORS = ["#2e5bff", "#ff4b36", "#22c55e", "#8b5cf6", "#ff9500", "#e6b800", "#14b8a6", "#ec4899"];
+
+interface Anchor {
+  x: number;
+  y: number;
+}
+
+/**
+ * Drag-a-colored-wire matching UI — replaced the previous per-left-item
+ * `<select>` dropdown (2026-07-23, explicit user request). Each left item
+ * gets a fixed color; dragging from its handle to a right item draws a
+ * curved SVG wire in that color and records the pair. Anchor positions are
+ * measured via `getBoundingClientRect` in an effect (never read directly
+ * during render, to avoid the same "ref access during render" pitfall
+ * flagged elsewhere in this codebase — see MEMORY.md) and stored in state,
+ * so the SVG only ever renders from that state, never from refs directly.
+ */
 function MatchColumnsBody({ question, idx, answer, isLocked, onSelect }: TypeBodyProps<MatchColumnsSanitized, Record<string, string>>) {
-  const setPair = (left: string, right: string) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const leftRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const rightRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [positions, setPositions] = useState<{ left: Anchor[]; right: Anchor[] }>({ left: [], right: [] });
+  const [dragLeftIdx, setDragLeftIdx] = useState<number | null>(null);
+  const [dragPos, setDragPos] = useState<Anchor | null>(null);
+
+  // Practice mode only (graded mode never receives the answer key at all) —
+  // used purely to tint wires green/red instead of by left-item color once
+  // the question has been revealed, same spirit as the other body types'
+  // feedback treatment.
+  const correctMap = question.pairs ? new Map(question.pairs.map((p) => [p.left, p.right])) : null;
+
+  const recomputePositions = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    const toAnchor = (el: HTMLDivElement | null, side: "left" | "right"): Anchor => {
+      if (!el) return { x: 0, y: 0 };
+      const r = el.getBoundingClientRect();
+      return { x: (side === "left" ? r.right : r.left) - containerRect.left, y: r.top + r.height / 2 - containerRect.top };
+    };
+    setPositions({
+      left: leftRefs.current.map((el) => toAnchor(el, "left")),
+      right: rightRefs.current.map((el) => toAnchor(el, "right")),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    recomputePositions();
+    window.addEventListener("resize", recomputePositions);
+    return () => window.removeEventListener("resize", recomputePositions);
+  }, [recomputePositions, question.leftItems.length, question.rightItems.length]);
+
+  useEffect(() => {
+    if (dragLeftIdx === null) return;
+
+    const toContainerPoint = (e: PointerEvent): Anchor | null => {
+      const container = containerRef.current;
+      if (!container) return null;
+      const rect = container.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    const handleMove = (e: PointerEvent) => {
+      const point = toContainerPoint(e);
+      if (point) setDragPos(point);
+    };
+
+    const handleUp = (e: PointerEvent) => {
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const rightEl = target?.closest<HTMLElement>("[data-right-idx]");
+      if (rightEl) {
+        const rightIdx = Number(rightEl.dataset.rightIdx);
+        const leftText = question.leftItems[dragLeftIdx];
+        const rightText = question.rightItems[rightIdx];
+        onSelect(idx, { ...answer, [leftText]: rightText });
+      }
+      setDragLeftIdx(null);
+      setDragPos(null);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [dragLeftIdx, question.leftItems, question.rightItems, answer, idx, onSelect]);
+
+  const startDrag = (leftIdx: number) => (e: React.PointerEvent) => {
     if (isLocked) return;
-    onSelect(idx, { ...answer, [left]: right });
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    setDragLeftIdx(leftIdx);
+    setDragPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const clearPair = (left: string) => {
+    if (isLocked) return;
+    const next = { ...answer };
+    delete next[left];
+    onSelect(idx, next);
+  };
+
+  const wireColorFor = (leftIdx: number, leftText: string, rightText: string): string => {
+    if (correctMap) return correctMap.get(leftText) === rightText ? "#22c55e" : "#ff4b36";
+    return WIRE_COLORS[leftIdx % WIRE_COLORS.length];
   };
 
   return (
-    <div className="space-y-2">
-      {question.leftItems.map((left, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <span className="flex-1 p-3 rounded-[var(--radius-btn)] border-2 border-ink/10 bg-white font-mono text-sm">{left}</span>
-          <select
-            value={answer[left] ?? ""}
-            onChange={(e) => setPair(left, e.target.value)}
-            disabled={isLocked}
-            className="input-tactile flex-1 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            <option value="">-- Match --</option>
-            {question.rightItems.map((right, j) => (
-              <option key={j} value={right}>
-                {right}
-              </option>
-            ))}
-          </select>
-        </div>
-      ))}
+    <div ref={containerRef} className="relative grid grid-cols-2 gap-x-10 gap-y-3">
+      <svg className="absolute inset-0 h-full w-full overflow-visible" style={{ pointerEvents: "none" }}>
+        {question.leftItems.map((left, i) => {
+          const rightText = answer[left];
+          if (!rightText) return null;
+          const rightIdx = question.rightItems.indexOf(rightText);
+          const from = positions.left[i];
+          const to = positions.right[rightIdx];
+          if (!from || !to || rightIdx < 0) return null;
+          const midX = (from.x + to.x) / 2;
+          return (
+            <path
+              key={i}
+              d={`M${from.x},${from.y} C${midX},${from.y} ${midX},${to.y} ${to.x},${to.y}`}
+              stroke={wireColorFor(i, left, rightText)}
+              strokeWidth={4}
+              fill="none"
+              strokeLinecap="round"
+            />
+          );
+        })}
+        {dragLeftIdx !== null && dragPos && positions.left[dragLeftIdx] && (
+          <path
+            d={`M${positions.left[dragLeftIdx].x},${positions.left[dragLeftIdx].y} L${dragPos.x},${dragPos.y}`}
+            stroke={WIRE_COLORS[dragLeftIdx % WIRE_COLORS.length]}
+            strokeWidth={4}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray="8 6"
+          />
+        )}
+      </svg>
+
+      <div className="space-y-3">
+        {question.leftItems.map((left, i) => {
+          const color = WIRE_COLORS[i % WIRE_COLORS.length];
+          const connected = !!answer[left];
+          return (
+            <div
+              key={i}
+              ref={(el) => {
+                leftRefs.current[i] = el;
+              }}
+              className="flex items-center justify-between gap-2 rounded-[var(--radius-btn)] border-2 bg-white p-3 font-mono text-sm"
+              style={{ borderColor: connected ? color : "rgba(20,18,15,0.1)" }}
+            >
+              <span className="flex-1">{left}</span>
+              {connected && !isLocked && (
+                <button type="button" onClick={() => clearPair(left)} title="Remove match" className="shrink-0 text-ink/40 hover:text-coral">
+                  <X size={14} />
+                </button>
+              )}
+              <button
+                type="button"
+                onPointerDown={startDrag(i)}
+                disabled={isLocked}
+                title="Drag to a match on the right"
+                className="h-5 w-5 shrink-0 rounded-full border-2 border-white shadow-[0_0_0_2px_rgba(20,18,15,0.15)] disabled:cursor-not-allowed"
+                style={{ background: color, touchAction: "none", cursor: isLocked ? "not-allowed" : "grab" }}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="space-y-3">
+        {question.rightItems.map((right, j) => {
+          const matchedLeftIdx = question.leftItems.findIndex((l) => answer[l] === right);
+          const color = matchedLeftIdx >= 0 ? wireColorFor(matchedLeftIdx, question.leftItems[matchedLeftIdx], right) : null;
+          return (
+            <div
+              key={j}
+              ref={(el) => {
+                rightRefs.current[j] = el;
+              }}
+              data-right-idx={j}
+              className="flex items-center gap-2 rounded-[var(--radius-btn)] border-2 bg-white p-3 font-mono text-sm"
+              style={{ borderColor: color ?? "rgba(20,18,15,0.1)" }}
+            >
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: color ?? "transparent", border: color ? "none" : "2px solid rgba(20,18,15,0.2)" }} />
+              {right}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

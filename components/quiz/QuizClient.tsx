@@ -541,6 +541,7 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
 
       <SubmitLiquidOverlay
         phase={submitPhase}
+        success={submitStatus === "success"}
         onRevealComplete={() => {
           setRevealed(true);
           setSubmitPhase("idle");

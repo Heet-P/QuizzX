@@ -1752,3 +1752,96 @@ none of this is obvious from a quick read of the component:
 - Not yet visually verified in a live browser by the agent (Section 9's
   standing note) — flagged to the user to check the actual animation feel,
   timing, and the reduced-motion fallback.
+
+---
+
+## 20. Second Round of Visual Fixes + Match-Columns Drag-Wire Rebuild (2026-07-23, later still)
+
+Real bugs found from a screenshot of the Section 19 work, plus one larger
+UX rebuild:
+
+**20.1 — Share card, `ShareCard.module.css`:**
+- **"QUIZ" label overlapping the username**: `.quiz` was `bottom: 270px`
+  anchored, sized independently of how tall the username block above it
+  actually rendered — no shared reference point, so they could collide
+  depending on font metrics. Switched `.quiz` to `top: 800px` (anchored
+  below the avatar/username block instead of up from the card's bottom
+  edge) and added explicit `line-height: 1.1` to the text elements in that
+  area so the vertical rhythm doesn't depend on a custom pixel font's
+  unpredictable default line-height.
+- **Crown not aligned over the avatar / too small**: it was a normal-flow
+  child of `.avatarWrap` sized only 96×96 — small relative to how much of
+  that box is just background in the source SVG illustration (see 20.3),
+  and not reliably centered above the circular avatar. Made `.crown`
+  `position: absolute` (avatarWrap is already a positioning context),
+  centered via `left:50%; transform:translateX(-50%) rotate(-10deg)`, sized
+  up to 190×190, and `top:-90px` so it visually overlaps the top of the
+  avatar like it's resting on it.
+- **Translucent stat boxes → solid**: `.stats` background changed from
+  `rgba(20,18,15,0.82)` to solid `#14120f` per explicit request ("make them
+  full black").
+
+**20.2 — Results page**: "View Leaderboard" only filled half the button
+grid's width when not in practice mode (no "Practice Again" button to fill
+the other grid cell alongside it). Fixed in `ResultsClient.tsx` by
+conditionally adding `sm:col-span-2` to that Link whenever `!isPractice`.
+
+**20.3 — Real SVG artwork for the share card** (follow-up to Section 19's
+`svg.md` requests): user supplied `public/crown.svg`, `flame.svg`,
+`star.svg`, `globe.svg` — wired into `ShareCardFace.tsx` via `<img>` tags
+in place of the emoji placeholders. `svg.md` updated to "Fulfilled"; no
+emoji left anywhere in the app.
+
+**20.4 — Liquid submission overlay waves made much bigger** — the first
+pass's wave layers were only 28-60px tall bands right at the fill's surface
+line, easy to miss; user asked for waves "going up and down across the
+entire screen." Increased to 100-220px tall layers with proportionally
+bigger amplitude in the SVG path curves (`SubmitLiquidOverlay.tsx`/
+`.module.css`), so the undulation reads as the dominant motion rather than
+a subtle sliver.
+
+**20.5 — Success confetti pop**: a new `success` prop on
+`SubmitLiquidOverlay` (wired from `QuizClient.tsx`'s `submitStatus ===
+"success"`) gates a one-shot confetti burst (12 pieces, fixed deterministic
+angle/distance/rotation/color array computed once at module scope — not
+`Math.random()`, not recomputed per render) that plays only during the
+`"revealing"` phase, only on success, never on error. Skipped entirely
+under `prefers-reduced-motion`.
+
+**20.6 — Match-columns: force-shuffled right column + drag-wire rebuild.**
+Two separate but related fixes:
+- **Real bug**: `sanitizeQuestion`'s match_columns case builds `leftItems`
+  and `rightItems` from the same `pairs` array in the same order, so
+  `left[i]` always correctly pairs with `right[i]` *by construction* unless
+  something explicitly shuffles `rightItems`. That shuffle was previously
+  gated behind the quiz's `shuffleOptions` setting (an MCQ-option cosmetic
+  toggle) — meaning any match-columns question in a quiz that didn't have
+  `shuffleOptions` enabled had its correct answer trivially readable by
+  position. Split `shuffleSanitizedQuestion` into two functions in
+  `lib/quiz-sanitize.ts`: `shuffleMcqOptions` (still gated on the setting)
+  and `shuffleMatchColumnsRight` (always applied, never optional — it's a
+  correctness fix, not a preference). Applied at both call sites:
+  `app/api/quizzes/[id]/route.ts` (per-user seed, as before) and
+  `app/api/rooms/[code]/route.ts` (previously didn't shuffle *anything* at
+  all — now shuffles match-columns using a per-room, not per-user, seed
+  since a live room shows one synchronized view to every participant).
+- **UI rebuild**: replaced the per-left-item `<select>` dropdown in
+  `QuestionCard.tsx`'s `MatchColumnsBody` with a drag-a-colored-wire
+  interface (explicit user request) — each left item gets a fixed color
+  from `WIRE_COLORS`, dragging its handle to a right item draws a curved
+  SVG wire and records the pair; a small "×" clears an existing pair.
+  Anchor coordinates for drawing wires are measured via
+  `getBoundingClientRect` inside a `useLayoutEffect` (window resize also
+  re-measures) and stored in state — deliberately **never** read directly
+  from refs during render, to avoid the exact "ref access during render"
+  lint violation (`react-hooks/refs`) already flagged as pre-existing
+  elsewhere in `QuizClient.tsx` (Section 13 item 11's sibling issue — don't
+  reproduce that pattern in new code). In practice mode, once the answer
+  key is revealed (`question.pairs` present), wires tint green/red by
+  correctness instead of by left-item color. Uses Pointer Events
+  throughout (not separate mouse/touch handlers), so basic touch dragging
+  works without extra code.
+- Not yet visually/interactively verified in a live browser by the agent
+  (Section 9's standing note) — flagged to the user to actually try
+  dragging a wire, confirm the shuffled order looks right, and check the
+  crown/stat-box/quiz-label fixes render correctly.

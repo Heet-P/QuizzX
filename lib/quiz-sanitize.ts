@@ -58,11 +58,43 @@ export function sanitizeQuestion(q: QuizQuestion, revealAnswers = false): Saniti
  * lines up with which left item on screen gets shuffled). No-op for
  * fill-blank, which has nothing to shuffle. Always call this after
  * `sanitizeQuestion`, never before — it only recognizes the sanitized shape.
+ *
+ * @deprecated for match_columns — shuffling the right column is no longer
+ * optional (see {@link shuffleMatchColumnsRight}); this combined function is
+ * kept only for mcq option shuffling, gated by the quiz's `shuffleOptions`
+ * setting at the call site.
  */
 export function shuffleSanitizedQuestion(q: SanitizedQuizQuestion, seed: number): SanitizedQuizQuestion {
   if ("options" in q && Array.isArray(q.options)) {
     return { ...q, options: seededShuffle(q.options, seed) } as McqSingleSanitized | McqMultiSanitized;
   }
+  if ("rightItems" in q && Array.isArray(q.rightItems)) {
+    return { ...q, rightItems: seededShuffle(q.rightItems, seed) } as MatchColumnsSanitized;
+  }
+  return q;
+}
+
+/**
+ * Shuffles only mcq `options` — a no-op for every other question type.
+ * Callers gate this on the quiz's `shuffleOptions` setting.
+ */
+export function shuffleMcqOptions(q: SanitizedQuizQuestion, seed: number): SanitizedQuizQuestion {
+  if ("options" in q && Array.isArray(q.options)) {
+    return { ...q, options: seededShuffle(q.options, seed) } as McqSingleSanitized | McqMultiSanitized;
+  }
+  return q;
+}
+
+/**
+ * Always shuffles match-columns' right column — unlike mcq option order,
+ * this is never optional. `sanitizeQuestion` builds `leftItems`/`rightItems`
+ * from the same `pairs` array in the same order, so left[i] correctly pairs
+ * with right[i] by construction — left unshuffled, the correct answer is
+ * literally "match by position," trivially guessable regardless of the
+ * quiz's `shuffleOptions` setting (added 2026-07-23, real bug found in
+ * testing). A no-op for every other question type.
+ */
+export function shuffleMatchColumnsRight(q: SanitizedQuizQuestion, seed: number): SanitizedQuizQuestion {
   if ("rightItems" in q && Array.isArray(q.rightItems)) {
     return { ...q, rightItems: seededShuffle(q.rightItems, seed) } as MatchColumnsSanitized;
   }
