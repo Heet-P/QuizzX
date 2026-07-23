@@ -35,8 +35,21 @@ interface AchievementInputs {
 }
 
 // Ported from SubmissionController.js's awardAchievements — inserts each
-// newly-earned achievement (ON CONFLICT DO NOTHING equivalent via catching
-// the unique-constraint error) and sums the XP for ones actually inserted.
+// newly-earned achievement and sums the XP for ones actually inserted.
+//
+// Fixed 2026-07-23: the original per-slug try/catch around P2002 (unique
+// constraint — "already earned") doesn't work inside a Postgres
+// transaction. Any statement error — including a unique-constraint
+// violation — puts the *whole* transaction into an aborted state
+// (`25P02: current transaction is aborted`) until it's rolled back; Prisma
+// recovering the error in JS doesn't undo that at the Postgres level, so
+// every query after the first already-earned achievement failed with
+// 25P02 instead of a clean P2002, breaking submission for any user who'd
+// earned even one achievement before. Fixed by pre-checking which slugs are
+// already earned (one SELECT, no risk of a constraint violation) and only
+// ever inserting the genuinely new ones via `createMany` + `skipDuplicates`
+// (Postgres's native `ON CONFLICT DO NOTHING`, which — unlike a plain
+// `create()` — never raises an error the transaction has to recover from).
 async function awardAchievements(tx: Tx, userId: string, inputs: AchievementInputs): Promise<{ xpGained: number; newSlugs: string[] }> {
   const toAward: string[] = [];
   if (inputs.isFirstQuiz) toAward.push("first_quiz");
@@ -47,19 +60,24 @@ async function awardAchievements(tx: Tx, userId: string, inputs: AchievementInpu
   if (inputs.isSpeedRound) toAward.push("speed_demon");
   if (inputs.rank !== null && inputs.rank <= 3) toAward.push("top_3");
 
-  let xpGained = 0;
-  const newSlugs: string[] = [];
-  for (const slug of toAward) {
-    try {
-      await tx.userAchievement.create({ data: { userId, achievement: slug } });
-      const def = await tx.achievement.findUnique({ where: { slug }, select: { xpReward: true } });
-      xpGained += def?.xpReward ?? 0;
-      newSlugs.push(slug);
-    } catch (err) {
-      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
-      // already earned — ignore, matching v1's ON CONFLICT DO NOTHING
-    }
-  }
+  if (toAward.length === 0) return { xpGained: 0, newSlugs: [] };
+
+  const alreadyEarned = await tx.userAchievement.findMany({
+    where: { userId, achievement: { in: toAward } },
+    select: { achievement: true },
+  });
+  const earnedSet = new Set(alreadyEarned.map((a) => a.achievement));
+  const newSlugs = toAward.filter((slug) => !earnedSet.has(slug));
+  if (newSlugs.length === 0) return { xpGained: 0, newSlugs: [] };
+
+  await tx.userAchievement.createMany({
+    data: newSlugs.map((achievement) => ({ userId, achievement })),
+    skipDuplicates: true,
+  });
+
+  const defs = await tx.achievement.findMany({ where: { slug: { in: newSlugs } }, select: { xpReward: true } });
+  const xpGained = defs.reduce((sum, d) => sum + (d.xpReward ?? 0), 0);
+
   return { xpGained, newSlugs };
 }
 
