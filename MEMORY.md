@@ -1295,16 +1295,15 @@ Collected in one place since they're each individually easy to hit again:
    one entry became irrelevant; the user explicitly asked for the file to be
    named `svg.md` on 2026-07-23, so that's the current name — don't recreate
    `svg_request.md`.
-   **One deliberate exception (2026-07-23)**: the shareable result card
-   (`components/quiz/ShareCardFace.tsx`) uses emoji (👑 🔥 ⭐ 🌐) because it
-   was built to match a reference design the user hand-authored and supplied
-   directly (`public/shareCard/`), which itself used emoji throughout — a
-   Duolingo/Strava-style social share image is a different context from the
-   app's own interactive chrome, and the user's own reference is the
-   strongest possible signal for that one asset. This is NOT a reopening of
-   the general rule — every other UI surface still gets Lucide icons only.
-   Flag it if touching this file again in case the user actually wants icons
-   there too; don't assume the exception silently extends elsewhere.
+   **Resolved (2026-07-23, same day)**: the shareable result card
+   (`components/quiz/ShareCardFace.tsx`) briefly used emoji (👑 🔥 ⭐ 🌐) as
+   a placeholder exception while matching a reference design the user
+   hand-authored (`public/shareCard/`). Logged as 4 requests in `svg.md`;
+   the user then supplied real commissioned artwork the same day
+   (`public/crown.svg`, `flame.svg`, `star.svg`, `globe.svg`), now wired in
+   via `<img>` tags — no emoji left anywhere in the app. The exception is
+   fully closed, not just dormant; `svg.md`'s "Fulfilled" section has the
+   per-icon detail if this file needs touching again.
 10. **This is a structural-migration project with an explicitly reversed
     "don't redesign" instruction** (Section 5.5) — if any future instruction
     seems to contradict "preserve v1 UI exactly," that's not a

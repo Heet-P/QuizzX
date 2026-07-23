@@ -32,7 +32,10 @@ export const ShareCardFace = forwardRef<HTMLDivElement, ShareCardFaceProps>(func
       </div>
 
       <div className={`${styles.stats} ${styles.left}`}>
-        <div className={styles.icon}>⭐</div>
+        <div className={styles.icon}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- same-origin /public asset captured by html-to-image; next/image adds no value here. */}
+          <img className={styles.iconImg} src="/star.svg" alt="" />
+        </div>
         <div className={styles.label}>SCORE</div>
         <div className={styles.value}>
           {correct}/{total}
@@ -41,7 +44,10 @@ export const ShareCardFace = forwardRef<HTMLDivElement, ShareCardFaceProps>(func
       </div>
 
       <div className={styles.avatarWrap}>
-        {crown && <div className={styles.crown}>👑</div>}
+        {crown && (
+          // eslint-disable-next-line @next/next/no-img-element -- same-origin /public asset captured by html-to-image; next/image adds no value here.
+          <img className={styles.crown} src="/crown.svg" alt="" />
+        )}
         {avatarUrl && !avatarFailed ? (
           // eslint-disable-next-line @next/next/no-img-element -- needs a real <img> with crossOrigin for html-to-image's canvas capture; next/image doesn't expose that attribute.
           <img className={styles.avatar} src={avatarUrl} alt="" crossOrigin="anonymous" onLoad={onAvatarLoad} onError={onAvatarError} />
@@ -52,7 +58,10 @@ export const ShareCardFace = forwardRef<HTMLDivElement, ShareCardFaceProps>(func
       </div>
 
       <div className={`${styles.stats} ${styles.right}`}>
-        <div className={styles.icon}>🔥</div>
+        <div className={styles.icon}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- same-origin /public asset captured by html-to-image; next/image adds no value here. */}
+          <img className={styles.iconImg} src="/flame.svg" alt="" />
+        </div>
         <div className={styles.label}>STREAK</div>
         <div className={styles.value}>{streak}</div>
         <div className={styles.small}>{streak === 1 ? "Day" : "Days"}</div>
@@ -74,7 +83,10 @@ export const ShareCardFace = forwardRef<HTMLDivElement, ShareCardFaceProps>(func
         </div>
         <div className={styles.cta}>
           <div>Join me on QuizzX!</div>
-          <div className={styles.pill}>🌐 quizzx.app</div>
+          <div className={styles.pill}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- same-origin /public asset captured by html-to-image; next/image adds no value here. */}
+            <img className={styles.globeIcon} src="/globe.svg" alt="" /> quizzx.app
+          </div>
         </div>
       </div>
     </div>

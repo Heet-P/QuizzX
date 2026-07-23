@@ -109,8 +109,11 @@
   color: #14120f;
 }
 .crown {
-  font-size: 70px;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
   margin-bottom: -25px;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.3));
 }
 .avatarWrap h2 {
   margin: 18px 0 0;
@@ -145,12 +148,16 @@
   width: 74px;
   height: 74px;
   border-radius: 50%;
-  background: #ffd21d;
+  overflow: hidden;
   display: grid;
   place-items: center;
-  font-size: 34px;
   margin-top: -95px;
   border: 8px solid #fff9ea;
+}
+.iconImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .label {
   margin-top: 20px;
@@ -234,10 +241,18 @@
   color: #ffd200;
 }
 .pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   margin-top: 20px;
   padding: 16px 34px;
   border: 3px solid #ffd21d;
   border-radius: 999px;
   font-size: 26px;
+}
+.globeIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
 }

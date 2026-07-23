@@ -6,48 +6,31 @@ it gets logged here (name + description + suggested color palette) instead
 of falling back to an emoji or a vague/wrong icon, so the user can commission
 real artwork later.
 
-## Open requests
+## Fulfilled
 
-Logged 2026-07-23 — the shareable result card
-(`components/quiz/ShareCardFace.tsx`) currently uses emoji as placeholders,
-as a deliberate one-off exception (see `MEMORY.md` Section 13, item 9): it
-was built to match a reference design the user hand-authored and supplied
-directly (`public/shareCard/`), which itself used emoji throughout. These
-four should eventually be replaced with real SVG artwork:
+The 4 requests below were logged 2026-07-23 for the shareable result card
+(`components/quiz/ShareCardFace.tsx`), which had used emoji as a deliberate
+one-off placeholder exception (see `MEMORY.md` Section 13, item 9). The user
+supplied real commissioned artwork the same day — `public/crown.svg`,
+`public/flame.svg`, `public/star.svg`, `public/globe.svg` — now wired into
+`ShareCardFace.tsx` in place of the emoji:
 
-1. **Crown** (👑 placeholder)
-   - Used for: perfect-score (100%) badge above the avatar.
-   - Description: a simple, chunky, hand-drawn-style royal crown — 3-5
-     points, flat fill, thick dark outline to match the app's "tactile"
-     design language (see other cards/badges in the app).
-   - Color palette: gold/yellow fill (`--color-yellow` `#ffd200`), ink
-     outline (`--color-ink` `#14120f`), optionally 2-3 small gem accents in
-     `--color-coral`/`--color-blue`/`--color-green`.
+1. **Crown** (`public/crown.svg`) — perfect-score (100%) badge above the
+   avatar. Rendered at 96×96 with a drop-shadow, `.crown` class in
+   `ShareCard.module.css`.
+2. **Flame** (`public/flame.svg`) — the "Streak" stat box icon, cropped to a
+   circle inside `.icon`/`.iconImg`.
+3. **Star** (`public/star.svg`) — the "Score" stat box icon, same circular
+   crop treatment as the flame.
+4. **Globe** (`public/globe.svg`) — the small icon inline with "quizzx.app"
+   in the footer pill, `.globeIcon` class, cropped to a 28px circle.
 
-2. **Flame / streak** (🔥 placeholder)
-   - Used for: the "Streak" stat box icon.
-   - Description: a simple rounded flame silhouette, flat fill, thick dark
-     outline, matching the app's existing `Flame` Lucide icon usage
-     elsewhere (e.g. dashboard streak chip) but as a bespoke filled/colored
-     asset instead of a line icon, since this card's icon circles use solid
-     fills.
-   - Color palette: `--color-orange` (`#ff9500`) fill, ink outline.
-
-3. **Star / score** (⭐ placeholder)
-   - Used for: the "Score" stat box icon.
-   - Description: a simple 5-point star, flat fill, thick dark outline,
-     same "tactile" style as the flame above.
-   - Color palette: `--color-yellow` (`#ffd200`) fill, ink outline.
-
-4. **Globe / link** (🌐 placeholder)
-   - Used for: the "quizzx.app" pill in the card footer.
-   - Description: could likely just use the existing Lucide `Globe` icon
-     directly instead of commissioning custom artwork — lower priority than
-     the three above, listed for completeness.
-   - Color palette: white/`--color-yellow` outline to match the footer pill.
+No more emoji anywhere in `ShareCardFace.tsx` — the exception noted in
+`MEMORY.md` Section 13 item 9 no longer applies; that note should be updated
+to reflect this is now real SVG artwork, not emoji.
 
 ## Standing rule
 
-Never use emoji anywhere else in the app. If a new UI surface needs an icon
-and Lucide doesn't have a good match, add a new entry above rather than
-reaching for an emoji.
+Never use emoji anywhere in the app. If a new UI surface needs an icon and
+Lucide doesn't have a good match, add a new entry here (name + description +
+suggested color palette) rather than reaching for an emoji.
