@@ -1481,3 +1481,77 @@ truncated at 15,000 chars, same substring-truncation pattern as the
 existing `/api/ai/format-quiz`); malformed items from the model's JSON are
 silently dropped rather than surfaced to the admin (matches the existing
 `generateQuestions` filtering behavior).
+
+**Update 2026-07-23, later same day**: `NIM_MODEL` in `lib/ai-clients.ts` was
+changed from `meta/llama-3.1-8b-instruct` to `openai/gpt-oss-120b` — the
+user tested their real NVIDIA NIM key against this specific model and
+confirmed it works, so it replaced the original 8B pick for all of NIM's
+existing uses (`/api/ai/distractors`, `/api/ai/explain`). It's a
+"harmony"/reasoning-format model that can emit a separate
+`reasoning_content` field alongside `content` — `streamToText` in the same
+file only ever accumulates `content`, so the reasoning trace is never
+surfaced to end users; this was intentional, not an oversight.
+
+---
+
+## 18. Post-Launch Bug Fixes + Shareable Result Card (2026-07-23, later same day)
+
+Four more things fixed/added after real end-to-end testing began (Phase 6
+territory — first real bugs found by actually using the app with live
+Groq/NIM keys):
+
+1. **Comments section removed from the quiz results page**
+   (`components/quiz/ResultsClient.tsx`) per explicit user judgment call
+   ("seems pointless"). The backend (`QuizComment` model,
+   `/api/quizzes/[id]/comments[/[commentId]]` routes) was deliberately left
+   in place — deleting a real DB-backed model/table wasn't asked for and is
+   a much bigger, harder-to-reverse change than removing a UI section.
+   Those routes are now dead code, harmless, not wired to anything.
+
+2. **Analytics response shape bug** (real bug, not a data/grading issue —
+   verified directly against the DB that submissions and `scoreQuestion`
+   were both correct). `app/api/admin/quizzes/[id]/analytics/route.ts`
+   returned a bare array; `TeacherPage`'s `AnalyticsModal` always expected a
+   wrapped object (`{questions, submission_count, avg_score,
+   completion_rate}`), so it silently showed "No analytics data available
+   yet" regardless of real submissions. Fixed by changing the route to
+   return that wrapped shape, with `accuracy` as a 0..1 fraction and
+   `top_wrong_answer` in snake_case (matching what the client already read).
+   This also broke `components/admin/QuizManager.tsx`'s own inline
+   analytics section (used on `/admin`, expected a bare array with
+   different field names/units) — updated it to match the same new
+   canonical shape rather than maintaining two different response
+   contracts for the same endpoint.
+
+3. **Daily-challenge seed-fallback removed** (`lib/dashboard-data.ts`'s
+   `getDailyQuizForUser`). v1's original 3-tier fallback's 3rd tier
+   ("seed-based pick from any live quiz" when no admin ever published a
+   real daily challenge) meant any ordinary live quiz — including ones just
+   created via the new AI parser — got shown as "Today's Challenge" on the
+   dashboard. This was previously preserved intentionally "for v1 parity"
+   (see Section 17-era comments); the user explicitly asked for this
+   specific behavior to change, so it's gone now — the function returns
+   `null` when no quiz actually has `is_daily: true`, and the dashboard
+   simply omits the card. This is a deliberate deviation from v1 parity, not
+   an oversight — don't reintroduce the 3rd tier without asking again.
+
+4. **Shareable result card** (`lib/share-card.ts` +
+   `components/quiz/ShareCardModal.tsx`, wired into `ResultsClient.tsx` via
+   a new "Share Result Card" button). Strava/Duolingo-style PNG generated
+   entirely client-side on a `<canvas>` — no server route, no image
+   storage (R2 is still deferred, Section 9/11) — offered via download or
+   the Web Share API (`navigator.share`/`canShare` with a `File`, falling
+   back to download when unsupported). Shows username, Clerk avatar (or an
+   initial-letter fallback if the image fails to load), quiz title, score,
+   correct/total, and streak. Background color + a stamp label are keyed
+   off score percentage — **explicit user-specified bands, not a judgment
+   call**: <30% pale red, 30-59% blue, 60-89% purple, 90-99% green, exactly
+   100% golden-orange **with a gold crown drawn above the avatar** (the
+   crown must never appear at any other percentage). Canvas text uses the
+   app's actual brand fonts by reading the resolved font-family strings
+   next/font/local injects into `--font-geist-pixel`/`--font-satoshi`
+   (`document.documentElement`'s computed style), so it doesn't fall back
+   to system fonts. Not yet visually verified in a live browser by the
+   agent (per Section 9's standing note, automated browser/Playwright
+   verification needs the user's in-the-moment go-ahead) — flagged to the
+   user to check the actual rendered card.
