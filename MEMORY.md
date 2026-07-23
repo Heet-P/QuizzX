@@ -1535,23 +1535,90 @@ Groq/NIM keys):
    simply omits the card. This is a deliberate deviation from v1 parity, not
    an oversight — don't reintroduce the 3rd tier without asking again.
 
-4. **Shareable result card** (`lib/share-card.ts` +
-   `components/quiz/ShareCardModal.tsx`, wired into `ResultsClient.tsx` via
-   a new "Share Result Card" button). Strava/Duolingo-style PNG generated
-   entirely client-side on a `<canvas>` — no server route, no image
-   storage (R2 is still deferred, Section 9/11) — offered via download or
-   the Web Share API (`navigator.share`/`canShare` with a `File`, falling
-   back to download when unsupported). Shows username, Clerk avatar (or an
-   initial-letter fallback if the image fails to load), quiz title, score,
-   correct/total, and streak. Background color + a stamp label are keyed
-   off score percentage — **explicit user-specified bands, not a judgment
-   call**: <30% pale red, 30-59% blue, 60-89% purple, 90-99% green, exactly
-   100% golden-orange **with a gold crown drawn above the avatar** (the
-   crown must never appear at any other percentage). Canvas text uses the
-   app's actual brand fonts by reading the resolved font-family strings
-   next/font/local injects into `--font-geist-pixel`/`--font-satoshi`
-   (`document.documentElement`'s computed style), so it doesn't fall back
-   to system fonts. Not yet visually verified in a live browser by the
-   agent (per Section 9's standing note, automated browser/Playwright
-   verification needs the user's in-the-moment go-ahead) — flagged to the
-   user to check the actual rendered card.
+4. **Shareable result card** (`components/quiz/ShareCardModal.tsx`, wired
+   into `ResultsClient.tsx` via a new "Share Result Card" button).
+   Strava/Duolingo-style card, offered via download or the Web Share API
+   (`navigator.share`/`canShare` with a `File`, falling back to download
+   when unsupported). Shows username, Clerk avatar (or an initial-letter
+   fallback if the image fails to load), quiz title, score, correct/total,
+   and streak. Background color + a stamp label are keyed off score
+   percentage — **explicit user-specified bands, not a judgment call**:
+   <30% pale red, 30-59% blue, 60-89% purple, 90-99% green, exactly 100%
+   golden-orange **with a gold crown above the avatar** (the crown must
+   never appear at any other percentage).
+
+   **Rewritten same day, later**, once the user supplied a hand-built
+   reference design (`public/shareCard/index.html` + `style.css` — kept in
+   the repo as the source reference, not just inspiration). The first pass
+   was a hand-drawn `<canvas>` renderer (`lib/share-card.ts` used to contain
+   all the drawing code); this didn't match the reference's fidelity, and a
+   flat PNG can't have a hover/tilt effect. Replaced with a real DOM/CSS
+   component instead:
+   - `components/quiz/ShareCardFace.tsx` + `ShareCard.module.css` — the
+     actual card markup/styles, adapted from the reference 1:1 (same
+     1200×1200 layout, wave SVG, confetti/grid backgrounds, stat boxes,
+     footer), but with the background driven by `--band-from`/`--band-to`
+     CSS custom properties (set inline per score band, see `paletteFor` in
+     the now-much-smaller `lib/share-card.ts`) instead of the reference's
+     fixed yellow gradient, the crown made conditional, and the reference's
+     Google Fonts `<link>` swapped for the app's own self-hosted
+     `--font-display`/`--font-accent` (this project self-hosts all fonts on
+     purpose — see `lib/fonts.ts` — so a new Google Fonts CDN link would
+     have broken that convention).
+   - `components/core/tilt.tsx` — a small in-house pointer-tilt wrapper
+     (rotateX/rotateY driven by mouse position via framer-motion, already a
+     dependency). The user referenced `@/components/core/tilt` from a UI kit
+     that isn't installed in this project; this reimplements the same idea
+     rather than adding an unrelated package.
+   - The live DOM card is what's shown and hoverable/tiltable — never just a
+     static exported image. A `.shimmer-overlay` (new `app/globals.css`
+     utility) sweeps over the card only while the avatar `<img>` is still
+     loading; once it settles (load or error), the PNG is generated silently
+     in the background via the new `html-to-image` dependency
+     (`toPng(cardRef.current, {width:1200, height:1200, pixelRatio:2,
+     cacheBust:true})`) so Download/Share are instant by the time the user
+     clicks rather than generating on click. `crossOrigin="anonymous"` is
+     set on the avatar `<img>` for canvas-capture purposes; Clerk's
+     avatar host supports this, but it degrades to an initial-letter
+     fallback (`avatarFailed` state) if it ever doesn't.
+   - Not yet visually verified in a live browser by the agent (per Section
+     9's standing note, automated browser/Playwright verification needs the
+     user's in-the-moment go-ahead) — flagged to the user to check the
+     actual rendered/tilting card and the downloaded PNG.
+
+5. **Leaderboard silently showing "No scores yet" instead of "hidden" /
+   "not published" / "ended" states** — real bug, found from a genuine
+   server-log symptom (`GET /api/leaderboard?... 403`). Root cause:
+   `app/api/leaderboard/route.ts` returned 403 for its three meaningful
+   non-error states (leaderboard visibility off, quiz still draft, quiz
+   archived) — carrying useful data in the body (`hidden`/`notPublished`/
+   `archived` + a message) — but `lib/api-client.ts`'s `apiFetch` throws on
+   *any* non-2xx status and discards the body, so `LeaderboardClient.tsx`'s
+   `if (data.hidden) / else if (data.archived)` branches were dead code; the
+   `catch` block just silently kept whatever was already rendered, which
+   defaulted to the generic empty-state message. Fixed by changing all
+   three of those responses to 200 (they're states to render specially, not
+   fetch failures) — this is the same root-cause class as item 2 above
+   (Section 18), just a different endpoint. Also split the previously
+   mislabeled case: the route was tagging *draft* quizzes as `archived:
+   true` (reusing the "this quiz has ended" copy for a quiz that was never
+   published) — now `notPublished` and `archived` are distinct, correctly
+   labeled states in both the route and `LeaderboardClient`. The
+   leaderboard-hidden state's copy was also made more explicit per user
+   request ("Leaderboard: OFF" instead of just an icon + "Leaderboard is
+   hidden").
+
+6. **Liquid-fill submit-confirmation animation** — when a user confirms
+   quiz submission, the black "Submit" button in `ConfirmModal` (used via a
+   new `loading`/`loadingLabel` prop) now fills green from the bottom while
+   the `/api/submissions` request is in flight, instead of the modal
+   closing instantly and leaving only static "Submitting…" text on the
+   underlying page button. Pure CSS (`.liquid-fill-btn`/`.liquid-fill` +
+   keyframes in `app/globals.css`) — rises to ~88-94% and wobbles there
+   rather than claiming a false completion percentage, since there's no
+   known request duration to animate against. `QuizClient.tsx`'s
+   `handleAutoSubmit` no longer closes the confirm modal on click; it stays
+   open (Cancel disabled) until the request resolves — success swaps the
+   whole view via the existing `submitStatus` early-return, and the catch
+   block explicitly closes the modal on error so the user lands on the
+   existing "Retry Submission" screen.
