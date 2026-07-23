@@ -46,10 +46,6 @@ function fillYFromProgress(p: number): number {
   return 110 - p * 1.02;
 }
 
-function clipPolygon(y: number): string {
-  return `polygon(0% 110%, 0% ${y}%, 110% ${y}%, 110% 110%)`;
-}
-
 const CONFETTI_COLORS = ["#ffd200", "#2e5bff", "#ff4b36", "#8b5cf6", "#ff9500", "#ffffff"];
 // angle (degrees around the burst center), distance (px), end rotation (deg), start delay (s)
 const CONFETTI = [
@@ -91,7 +87,6 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
   const progress = useMotionValue(0);
   const displayPercent = useTransform(progress, (v) => `${Math.round(Math.min(100, Math.max(0, v)))}%`);
   const waterTop = useTransform(progress, (v) => `${fillYFromProgress(v)}%`);
-  const numberClip = useTransform(progress, (v) => clipPolygon(fillYFromProgress(v)));
 
   useEffect(() => {
     if (phase === "filling") {
@@ -214,18 +209,11 @@ export function SubmitLiquidOverlay({ phase, success, onRevealComplete }: Submit
         )}
 
         <div className={styles.centerText}>
-          <div className={styles.percentWrap}>
-            {/* Bottom copy: solid white, clipped from the bottom up by the
-                same live `progress` value driving the water outside — its
-                interior fills in lockstep with the background, and the
-                digits themselves are a direct readout of that same value. */}
-            <motion.div className={styles.percentClipWrap} style={{ clipPath: numberClip }}>
-              <motion.span className={`${styles.percentNumber} ${styles.percentNumberFill}`}>{displayPercent}</motion.span>
-            </motion.div>
-            {/* Top copy: transparent fill, bold dark stroke only — the
-                "glass" outline, always fully legible regardless of fill. */}
-            <motion.span className={`${styles.percentNumber} ${styles.percentNumberOutline}`}>{displayPercent}</motion.span>
-          </div>
+          {/* Solid black, always fully rendered — the earlier hollow/outline
+              treatment left it barely visible before the water reached it;
+              the digits are still a direct readout of the live `progress`
+              value, just no longer clipped to show that visually. */}
+          <motion.span className={styles.percentNumber}>{displayPercent}</motion.span>
           {isWaving ? (
             <div className={styles.waitingText}>
               <p>Calculating your results</p>

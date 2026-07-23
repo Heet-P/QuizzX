@@ -197,36 +197,20 @@
   padding-top: 44px;
 }
 
-/* Hollow, always-visible percentage number: two exactly-overlapping copies
-   of the same live count-up text. The bottom copy is solid white, clipped
-   from the bottom up by the same waypoint curve as the water outside — so
-   its interior fills in lockstep. The top copy is the "glass" — transparent
-   fill, bold dark stroke, never clipped, always fully legible regardless of
-   how much has filled. */
-.percentWrap {
-  position: relative;
-  display: inline-block;
-}
-.percentClipWrap {
-  position: absolute;
-  inset: 0;
-}
+/* Solid black, always fully rendered — an earlier hollow/outline-with-clip
+   treatment left it barely visible before the water reached it. A light
+   glow keeps it legible against both the pre-fill backdrop and the darker
+   green water alike, without the number itself stopping being solid black. */
 .percentNumber {
   font-family: var(--font-display), sans-serif;
   font-size: 72px;
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
-}
-.percentNumberFill {
-  color: #ffffff;
-  -webkit-text-fill-color: #ffffff;
-}
-.percentNumberOutline {
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  -webkit-text-stroke: 4px rgba(6, 24, 15, 0.92);
-  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  color: #000000;
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .lockedText,
