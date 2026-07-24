@@ -525,7 +525,7 @@ function OrderingBody({ question, idx, answer, isLocked, onSelect }: TypeBodyPro
   // question — parallels MatchColumnsBody's "nothing colors until
   // connected" gating, adapted to this type's always-fully-populated
   // starting state.
-  const [hasInteracted, setHasInteracted] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(() => answer.length === question.items.length);
 
   const handleReorder = (newOrder: { id: number; text: string }[]) => {
     setKeyedItems(newOrder);
