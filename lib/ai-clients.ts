@@ -54,17 +54,16 @@ export async function generateQuestions(topic: string, syllabus: string | undefi
   const prompt = `Generate ${numQ} multiple-choice quiz questions about: ${topic}.
 ${syllabus ? `\nSyllabus / context:\n${syllabus.substring(0, 3000)}\n` : ""}
 Rules:
-- Each question must have exactly 4 answer options.
-- Exactly one option must be correct.
+- Most questions should have exactly 4 answer options with exactly one correct.
+- When a question is naturally a true/false statement (a single factual claim to judge, rather than a "pick one of several options" question), use exactly 2 options instead: ["True","False"]. Vary this in naturally — don't force every question into this shape, and don't force every question into 4 options either.
 - Options should be plausible and varied in difficulty.
 - Include a brief explanation (1-2 sentences) for the correct answer.
 
 Return ONLY a valid JSON array. Each element must follow this exact shape:
-{"text":"<question text>","options":["<option 1>","<option 2>","<option 3>","<option 4>"],"answer":"A","explanation":"<why it is correct>"}
+{"text":"<question text>","options":["<option 1>","<option 2>",...],"answer":"A","explanation":"<why it is correct>"}
 
 CRITICAL rules for the "answer" field:
-- Use ONLY a single capital letter: A, B, C, or D
-- A means options[0] is correct, B means options[1], C means options[2], D means options[3]
+- Use ONLY a single capital letter matching the option's position: A means options[0], B means options[1], C means options[2], D means options[3] (C/D only apply when there are 4 options)
 No markdown fences, no commentary, no trailing text. Start your response with [ and end with ].`;
 
   const completion = await groq.chat.completions.create({
@@ -92,5 +91,5 @@ No markdown fences, no commentary, no trailing text. Start your response with [ 
 
       return { text, options, answer, explanation: String(q.explanation || "") };
     })
-    .filter((q: McqSingleQuestion) => q.text && q.options.length === 4 && q.options.includes(q.answer)) as QuizQuestion[];
+    .filter((q: McqSingleQuestion) => q.text && (q.options.length === 4 || q.options.length === 2) && q.options.includes(q.answer)) as QuizQuestion[];
 }

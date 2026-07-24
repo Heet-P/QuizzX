@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { seededShuffle, questionSeed } from "@/lib/seeded-shuffle";
-import { sanitizeQuestion, shuffleMcqOptions, shuffleMatchColumnsRight } from "@/lib/quiz-sanitize";
+import { sanitizeQuestion, shuffleMcqOptions, shuffleMatchColumnsRight, shuffleOrderingItems } from "@/lib/quiz-sanitize";
 import type { QuizQuestion, QuizSettings } from "@/types/quiz";
 
 // GET /api/quizzes/:id — ported from QuizController.getQuiz. Applies the
@@ -50,9 +50,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     let sanitized = sanitizeQuestion(q, isPractice);
     const qSeed = seed + i + 1;
     if (settings.shuffleOptions) sanitized = shuffleMcqOptions(sanitized, qSeed);
-    // Match-columns' right column is always shuffled — never optional, see
-    // lib/quiz-sanitize.ts's shuffleMatchColumnsRight doc comment.
+    // Match-columns' right column and ordering's item list are always
+    // shuffled — never optional, see lib/quiz-sanitize.ts's
+    // shuffleMatchColumnsRight/shuffleOrderingItems doc comments.
     sanitized = shuffleMatchColumnsRight(sanitized, qSeed);
+    sanitized = shuffleOrderingItems(sanitized, qSeed);
     return sanitized;
   });
 

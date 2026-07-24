@@ -139,7 +139,7 @@ export function isPracticeMode(settings: QuizSettings): boolean {
 // working without a data migration — treat a missing `type` as "mcq_single"
 // everywhere via `questionType()` below, never assume `q.type` is set.
 
-export type QuestionType = "mcq_single" | "mcq_multi" | "fill_blank" | "match_columns";
+export type QuestionType = "mcq_single" | "mcq_multi" | "fill_blank" | "match_columns" | "ordering";
 
 interface QuestionCommon {
   text: string;
@@ -179,7 +179,13 @@ export interface MatchColumnsQuestion extends QuestionCommon {
   pairs: MatchPair[];
 }
 
-export type QuizQuestion = McqSingleQuestion | McqMultiQuestion | FillBlankQuestion | MatchColumnsQuestion;
+export interface OrderingQuestion extends QuestionCommon {
+  type: "ordering";
+  /** Canonical correct order, first-to-last. */
+  items: string[];
+}
+
+export type QuizQuestion = McqSingleQuestion | McqMultiQuestion | FillBlankQuestion | MatchColumnsQuestion | OrderingQuestion;
 
 /**
  * Reads a question's type, defaulting missing/legacy data to "mcq_single".
@@ -209,7 +215,20 @@ export type MatchColumnsSanitized = Omit<MatchColumnsQuestion, "pairs"> & {
   pairs?: MatchPair[];
 };
 
-export type SanitizedQuizQuestion = McqSingleSanitized | McqMultiSanitized | FillBlankSanitized | MatchColumnsSanitized;
+/**
+ * `items` here means the shuffled display list, NOT the canonical order
+ * `OrderingQuestion.items` documents — parallels `options` on mcq_single
+ * (unlike match_columns' `pairs`, the field name is safe to reuse for
+ * display since `correctOrder` is what carries the answer key).
+ */
+export type OrderingSanitized = Omit<OrderingQuestion, "items"> & {
+  /** Shuffled display order — never the canonical correct order. */
+  items: string[];
+  /** Present only when revealAnswers (practice mode) — the canonical correct order. */
+  correctOrder?: string[];
+};
+
+export type SanitizedQuizQuestion = McqSingleSanitized | McqMultiSanitized | FillBlankSanitized | MatchColumnsSanitized | OrderingSanitized;
 
 // ── Per-question submitted-answer shapes ────────────────────────────────────
 // Keyed by question index in the submission's `answers` JSON blob, same as v1.
@@ -219,7 +238,10 @@ export type FillBlankAnswer = string;
 /** Keyed by left-item text (the stable side) -> the right-item text the student paired it with. */
 export type MatchColumnsAnswer = Record<string, string>;
 
-export type QuestionAnswer = McqSingleAnswer | McqMultiAnswer | FillBlankAnswer | MatchColumnsAnswer;
+/** The student's arranged order, by item text. */
+export type OrderingAnswer = string[];
+
+export type QuestionAnswer = McqSingleAnswer | McqMultiAnswer | FillBlankAnswer | MatchColumnsAnswer | OrderingAnswer;
 
 export type QuizStatus = "draft" | "live" | "archived";
 

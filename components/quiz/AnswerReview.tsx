@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { QuestionCard } from "./QuestionCard";
-import { mcqMultiIsFullyCorrect, fillBlankIsCorrect, matchColumnsIsFullyCorrect } from "@/lib/quiz-client-scoring";
+import { mcqMultiIsFullyCorrect, fillBlankIsCorrect, matchColumnsIsFullyCorrect, orderingIsFullyCorrect } from "@/lib/quiz-client-scoring";
 import {
   questionType,
   type SanitizedQuizQuestion,
@@ -13,6 +13,7 @@ import {
   type McqMultiSanitized,
   type FillBlankSanitized,
   type MatchColumnsSanitized,
+  type OrderingSanitized,
 } from "@/types/quiz";
 
 interface ReviewData {
@@ -43,6 +44,11 @@ function computeFeedback(q: SanitizedQuizQuestion, submitted: QuestionAnswer | u
       const mq = q as MatchColumnsSanitized;
       if (!submitted || typeof submitted !== "object" || Array.isArray(submitted) || !mq.pairs) return "wrong";
       return matchColumnsIsFullyCorrect(submitted, mq.pairs) ? "correct" : "wrong";
+    }
+    case "ordering": {
+      const oq = q as OrderingSanitized;
+      if (!Array.isArray(submitted) || !oq.correctOrder) return "wrong";
+      return orderingIsFullyCorrect(submitted, oq.correctOrder) ? "correct" : "wrong";
     }
     default:
       return "wrong";
