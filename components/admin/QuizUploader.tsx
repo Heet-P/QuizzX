@@ -47,6 +47,7 @@ import {
   type McqMultiQuestion,
   type FillBlankQuestion,
   type MatchColumnsQuestion,
+  type OrderingQuestion,
 } from "@/types/quiz";
 
 type ModularSettings = Pick<
@@ -445,6 +446,7 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   mcq_multi: "Multi Correct",
   fill_blank: "Fill in the Blank",
   match_columns: "Match the Columns",
+  ordering: "Ordering",
 };
 
 /** Type-aware answer-key preview for one question — added 2026-07-23 alongside AI multi-type parsing. */
@@ -497,6 +499,19 @@ function QuestionPreviewBody({ question }: { question: QuizQuestion }) {
               <span className="px-2 py-1 rounded-[var(--radius-chip)] bg-white border border-ink/10">{pair.left}</span>
               <ArrowLeftRight size={12} className="text-ink/40 shrink-0" />
               <span className="px-2 py-1 rounded-[var(--radius-chip)] bg-green">{pair.right}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    case "ordering": {
+      const q = question as OrderingQuestion;
+      return (
+        <div className="space-y-1">
+          {q.items.map((item, j) => (
+            <div key={j} className="flex items-center gap-2 text-xs font-accent font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-ink text-white shrink-0">{j + 1}</span>
+              <span className="px-2 py-1 rounded-[var(--radius-chip)] bg-green">{item}</span>
             </div>
           ))}
         </div>

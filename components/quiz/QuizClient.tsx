@@ -24,8 +24,9 @@ import {
   type McqMultiSanitized,
   type FillBlankSanitized,
   type MatchColumnsSanitized,
+  type OrderingSanitized,
 } from "@/types/quiz";
-import { mcqMultiIsFullyCorrect, fillBlankIsCorrect, matchColumnsIsFullyCorrect } from "@/lib/quiz-client-scoring";
+import { mcqMultiIsFullyCorrect, fillBlankIsCorrect, matchColumnsIsFullyCorrect, orderingIsFullyCorrect } from "@/lib/quiz-client-scoring";
 
 interface QuizData {
   id: string;
@@ -331,6 +332,9 @@ export function QuizClient({ id, challengerId }: { id: string; challengerId: str
         } else if (type === "match_columns") {
           const match = q as MatchColumnsSanitized;
           if (match.pairs) isCorrect = matchColumnsIsFullyCorrect(newAnswer as Record<string, string>, match.pairs);
+        } else if (type === "ordering") {
+          const ord = q as OrderingSanitized;
+          if (ord.correctOrder) isCorrect = orderingIsFullyCorrect(newAnswer as string[], ord.correctOrder);
         }
         setFeedback((prev) => ({ ...prev, [questionIndex]: isCorrect ? "correct" : "wrong" }));
 
