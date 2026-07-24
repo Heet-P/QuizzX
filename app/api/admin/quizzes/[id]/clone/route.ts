@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 // Not currently wired to any UI button (QuizManager.jsx never called it in
 // v1 either — see MIGRATION_AUDIT.md), ported for REST parity regardless.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await requireApiAdmin();
+  const { user, error } = await requireApiAdmin();
   if (error) return error;
   const { id } = await params;
 
@@ -21,6 +21,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       settings: orig.settings ?? {},
       isActive: false,
       status: "draft",
+      creatorId: user.id,
     },
     select: { id: true, title: true },
   });

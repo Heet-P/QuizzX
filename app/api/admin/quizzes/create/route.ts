@@ -6,7 +6,7 @@ import { normalizeQuizSettings } from "@/types/quiz";
 // POST /api/admin/quizzes/create — create a quiz from pre-built questions
 // (the AI-generate path), ported from AdminController.createQuizFromQuestions.
 export async function POST(req: Request) {
-  const { error } = await requireApiAdmin();
+  const { user, error } = await requireApiAdmin();
   if (error) return error;
 
   const body = await req.json().catch(() => null);
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
   try {
     const quiz = await prisma.quiz.create({
-      data: { title, questions, settings: settings as unknown as object, isActive: false, status: "draft" },
+      data: { title, questions, settings: settings as unknown as object, isActive: false, status: "draft", creatorId: user.id },
     });
     return NextResponse.json({ success: true, quizId: quiz.id, questionCount: questions.length }, { status: 201 });
   } catch (err) {

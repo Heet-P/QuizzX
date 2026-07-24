@@ -10,7 +10,7 @@ import { normalizeQuizSettings } from "@/types/quiz";
 // Parses a .docx/.txt/.md quiz document (multipart form) into questions,
 // builds settings from the other form fields, creates a draft quiz.
 export async function POST(req: Request) {
-  const { error } = await requireApiAdmin();
+  const { user, error } = await requireApiAdmin();
   if (error) return error;
 
   const form = await req.formData();
@@ -56,7 +56,14 @@ export async function POST(req: Request) {
     });
 
     const quiz = await prisma.quiz.create({
-      data: { title, questions: questions as unknown as object, settings: settings as unknown as object, isActive: false, status: "draft" },
+      data: {
+        title,
+        questions: questions as unknown as object,
+        settings: settings as unknown as object,
+        isActive: false,
+        status: "draft",
+        creatorId: user.id,
+      },
     });
 
     return NextResponse.json(

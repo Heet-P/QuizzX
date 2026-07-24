@@ -9,7 +9,7 @@ import { generateQuestions } from "@/lib/ai-clients";
 // instruction even though GROQ_API_KEY isn't configured yet — this will
 // start working the moment the key is added, no code changes needed.
 export async function POST(req: Request) {
-  const { error } = await requireApiAdmin();
+  const { user, error } = await requireApiAdmin();
   if (error) return error;
 
   const body = await req.json().catch(() => null);
@@ -51,6 +51,7 @@ export async function POST(req: Request) {
         isActive: true,
         status: "live",
         startedAt: new Date(),
+        creatorId: user.id,
       },
       select: { id: true },
     });

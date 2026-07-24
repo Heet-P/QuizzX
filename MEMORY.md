@@ -2165,3 +2165,18 @@ Teams UI's template name for this has changed too — users are now seeing
 webhook request is received" (confirmed both names are current/valid via
 search, likely a Teams-version/tenant difference) — the in-app help text
 in `TeamsIntegrationSettings.tsx` mentions both rather than asserting one.
+
+**25.2 — Real bug found while testing: `Quiz.creatorId` was never set,
+anywhere.** Publishing scores failed with "This quiz has no owning
+teacher" on every quiz — turned out not to be specific to one quiz. None
+of the four routes that create a `Quiz` row (`admin/quizzes/create`,
+`admin/quizzes/upload`, `admin/quizzes/[id]/clone`, `admin/daily-
+challenge`) ever passed `creatorId` to `prisma.quiz.create`, despite the
+column and the `creator` relation existing since the initial schema port.
+Confirmed against the live DB: all 6 existing quizzes had `creatorId =
+null`. Fixed all four routes to set `creatorId: user.id` (destructuring
+`user` from `requireApiAdmin()`, previously discarded as `{ error }`
+only); for `clone` specifically, the *cloner* becomes the new copy's
+owner, not the original quiz's creator. Backfilled the 6 existing quizzes
+to the `Heat16` admin account per the user's explicit choice (there were
+two admin accounts in the DB — asked rather than guessing which one).
