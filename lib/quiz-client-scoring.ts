@@ -27,3 +27,8 @@ export function fillBlankIsCorrect(submitted: string, correctAnswer: string): bo
 export function matchColumnsIsFullyCorrect(submitted: Record<string, string>, pairs: { left: string; right: string }[]): boolean {
   return pairs.every((p) => submitted[p.left] !== undefined && normalize(submitted[p.left]) === normalize(p.right));
 }
+
+export function orderingIsFullyCorrect(submitted: string[], correctOrder: string[]): boolean {
+  if (submitted.length !== correctOrder.length) return false;
+  return submitted.every((s, i) => normalize(s) === normalize(correctOrder[i]));
+}

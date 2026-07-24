@@ -115,6 +115,16 @@ export function scoreMatchColumns(submitted: Record<string, string> | null | und
   return correct / correctPairs.length;
 }
 
+/** Partial credit for ordering: fraction of items in their correct position. */
+export function scoreOrdering(submitted: string[] | null | undefined, correctOrder: string[]): number {
+  if (!submitted || submitted.length === 0 || correctOrder.length === 0) return 0;
+  let correct = 0;
+  for (let i = 0; i < correctOrder.length; i++) {
+    if (normalizeAnswer(submitted[i]) === normalizeAnswer(correctOrder[i])) correct++;
+  }
+  return correct / correctOrder.length;
+}
+
 /**
  * Unified entry point: grades one question against its submitted answer,
  * returning a 0..1 fraction regardless of question type. Missing/legacy
@@ -137,6 +147,10 @@ export function scoreQuestion(question: QuizQuestion, submitted: QuestionAnswer 
     case "match_columns": {
       const q = question as Extract<QuizQuestion, { pairs: MatchPair[] }>;
       return scoreMatchColumns(submitted && typeof submitted === "object" && !Array.isArray(submitted) ? submitted : null, q.pairs);
+    }
+    case "ordering": {
+      const q = question as Extract<QuizQuestion, { items: string[]; type: "ordering" }>;
+      return scoreOrdering(Array.isArray(submitted) ? (submitted as string[]) : null, q.items);
     }
     default:
       return 0;

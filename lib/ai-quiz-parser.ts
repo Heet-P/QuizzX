@@ -69,6 +69,13 @@ function coerceQuestion(raw: RawParsedQuestion): QuizQuestion | null {
       if (pairs.length < 2) return null;
       return { type: "match_columns", text, pairs, explanation, topic };
     }
+    default:
+      // Unreachable today: VALID_TYPES only lists the 4 types this function
+      // classifies into, so `type` is coerced to "mcq_single" for anything
+      // else (see above) — this exists purely to satisfy TS exhaustiveness
+      // now that QuestionType has grown a 5th member ("ordering", added
+      // 2026-07-24) that this AI-classification path doesn't handle yet.
+      return null;
   }
 }
 

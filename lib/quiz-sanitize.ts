@@ -11,6 +11,8 @@ import {
   type McqSingleSanitized,
   type McqMultiSanitized,
   type MatchColumnsSanitized,
+  type OrderingQuestion,
+  type OrderingSanitized,
 } from "@/types/quiz";
 
 // Strips the answer key from a question before it's sent to a quiz-taking
@@ -47,6 +49,10 @@ export function sanitizeQuestion(q: QuizQuestion, revealAnswers = false): Saniti
         rightItems: pairs.map((p) => p.right),
         ...(revealAnswers ? { pairs } : {}),
       };
+    }
+    case "ordering": {
+      const { items, ...rest } = q as OrderingQuestion;
+      return { ...rest, items, ...(revealAnswers ? { correctOrder: items } : {}) };
     }
   }
 }
@@ -97,6 +103,20 @@ export function shuffleMcqOptions(q: SanitizedQuizQuestion, seed: number): Sanit
 export function shuffleMatchColumnsRight(q: SanitizedQuizQuestion, seed: number): SanitizedQuizQuestion {
   if ("rightItems" in q && Array.isArray(q.rightItems)) {
     return { ...q, rightItems: seededShuffle(q.rightItems, seed) } as MatchColumnsSanitized;
+  }
+  return q;
+}
+
+/**
+ * Always shuffles ordering's displayed item order — unlike mcq option order,
+ * this is never optional. Leaving `items` in canonical correct order would
+ * make the question trivially free (the student submits back exactly what
+ * they see) — the same class of bug `shuffleMatchColumnsRight` fixed for
+ * match-columns' right column. A no-op for every other question type.
+ */
+export function shuffleOrderingItems(q: SanitizedQuizQuestion, seed: number): SanitizedQuizQuestion {
+  if ("items" in q && Array.isArray(q.items) && !("options" in q)) {
+    return { ...q, items: seededShuffle(q.items, seed) } as OrderingSanitized;
   }
   return q;
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { sanitizeQuestion, shuffleMatchColumnsRight } from "@/lib/quiz-sanitize";
+import { sanitizeQuestion, shuffleMatchColumnsRight, shuffleOrderingItems } from "@/lib/quiz-sanitize";
 import { questionSeed } from "@/lib/seeded-shuffle";
 import type { QuizQuestion } from "@/types/quiz";
 
@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
   // lib/quiz-sanitize.ts's shuffleMatchColumnsRight doc comment.
   const roomSeed = questionSeed(room.id, room.hostId ?? room.id);
   const questions = ((room.quiz.questions ?? []) as unknown as QuizQuestion[]).map((q, i) =>
-    shuffleMatchColumnsRight(sanitizeQuestion(q), roomSeed + i + 1)
+    shuffleOrderingItems(shuffleMatchColumnsRight(sanitizeQuestion(q), roomSeed + i + 1), roomSeed + i + 1)
   );
 
   return NextResponse.json({
