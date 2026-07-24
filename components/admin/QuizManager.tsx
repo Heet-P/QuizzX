@@ -21,6 +21,7 @@ import {
   Key,
   Shuffle,
   MessagesSquare,
+  Download,
 } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -183,6 +184,21 @@ export function QuizManager({
     }
   };
 
+  const handleDownloadGradebook = async (quizId: string, title: string) => {
+    try {
+      const blob = await apiFetchBlob(`/api/admin/quizzes/${quizId}/gradebook`);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `gradebook_${title.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to download gradebook CSV"));
+    }
+  };
+
   const toggleAnalytics = async (quizId: string) => {
     if (expandedId === quizId) {
       setExpandedId(null);
@@ -307,6 +323,13 @@ export function QuizManager({
                         title="Download integrity CSV"
                       >
                         <FileText size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDownloadGradebook(quiz.id, quiz.title)}
+                        className="btn-tactile text-xs bg-white py-2 px-3"
+                        title="Download gradebook CSV (Canvas/Moodle/Schoology import)"
+                      >
+                        <Download size={14} />
                       </button>
                       <button onClick={() => toggleAnalytics(quiz.id)} className="btn-tactile text-xs bg-white py-2 px-3" title="Toggle analytics">
                         <BarChart2 size={14} />
