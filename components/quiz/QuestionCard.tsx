@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CheckCircle, XCircle, Bookmark, BookmarkCheck, Lock, Lightbulb, X } from "lucide-react";
+import { CheckCircle, XCircle, Bookmark, BookmarkCheck, Lock, Lightbulb, X, GripVertical } from "lucide-react";
+import { Reorder } from "framer-motion";
 import {
   questionType,
   type SanitizedQuizQuestion,
@@ -8,6 +9,7 @@ import {
   type McqMultiSanitized,
   type FillBlankSanitized,
   type MatchColumnsSanitized,
+  type OrderingSanitized,
 } from "@/types/quiz";
 
 interface QuestionCardProps {
@@ -120,6 +122,16 @@ export const QuestionCard = memo(function QuestionCard({
           onSelect={onSelect}
         />
       )}
+      {type === "ordering" && (
+        <OrderingBody
+          question={question as OrderingSanitized}
+          idx={idx}
+          answer={Array.isArray(answer) ? (answer as string[]) : []}
+          feedback={feedback}
+          isLocked={isLocked}
+          onSelect={onSelect}
+        />
+      )}
 
       {isPractice && feedback && (
         <div className={`mt-3 p-2 rounded-[var(--radius-btn)] font-accent font-bold text-center ${feedback === "correct" ? "bg-green" : "bg-coral text-white"}`}>
@@ -148,7 +160,46 @@ interface TypeBodyProps<Q, A> {
   onSelect: (idx: number, newAnswer: QuestionAnswer) => void;
 }
 
+/** True when a 2-option mcq_single is a True/False question, regardless of casing or order. */
+function isTrueFalseOptions(options: string[]): boolean {
+  if (options.length !== 2) return false;
+  const norm = options.map((o) => o.trim().toLowerCase());
+  return (norm[0] === "true" && norm[1] === "false") || (norm[0] === "false" && norm[1] === "true");
+}
+
 function McqSingleBody({ question, idx, answer, feedback, isLocked, onSelect }: TypeBodyProps<McqSingleSanitized, string | undefined>) {
+  if (isTrueFalseOptions(question.options)) {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {question.options.map((option, optIdx) => {
+          let optionClass = "bg-white border-ink/10 hover:bg-cream-alt";
+          const isSelected = answer === option;
+
+          if (isSelected && feedback === "correct") optionClass = "bg-green border-green text-ink";
+          else if (isSelected && feedback === "wrong") optionClass = "bg-coral border-coral text-white";
+          else if (isSelected) optionClass = "bg-ink text-white border-ink";
+
+          if (feedback === "wrong" && question.answer === option) optionClass = "bg-green border-green border-2";
+
+          return (
+            <button
+              key={optIdx}
+              type="button"
+              onClick={() => onSelect(idx, option)}
+              disabled={isLocked}
+              className={`flex items-center justify-center gap-2 p-4 rounded-[var(--radius-btn)] border-2 font-accent font-bold text-lg transition-all ${optionClass} ${isLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
+            >
+              {option}
+              {feedback === "correct" && isSelected && <CheckCircle size={20} />}
+              {feedback === "wrong" && isSelected && <XCircle size={20} />}
+              {feedback === "wrong" && question.answer === option && <CheckCircle size={20} />}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       {question.options.map((option, optIdx) => {
@@ -439,5 +490,49 @@ function MatchColumnsBody({ question, idx, answer, isLocked, onSelect }: TypeBod
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Drag-to-reorder list using Framer Motion's Reorder primitive (already a
+ * dependency elsewhere in this codebase) instead of hand-rolled pointer
+ * tracking. `answer` starts empty before the student first drags anything,
+ * so it falls back to the sanitized (already-shuffled, see
+ * lib/quiz-sanitize.ts's shuffleOrderingItems) display order. Practice-mode
+ * coloring uses `question.correctOrder` directly (present only when
+ * revealed) rather than the `feedback` prop — same pattern MatchColumnsBody
+ * already uses for its own practice-mode coloring.
+ */
+function OrderingBody({ question, idx, answer, isLocked, onSelect }: TypeBodyProps<OrderingSanitized, string[]>) {
+  const order = answer.length === question.items.length ? answer : question.items;
+
+  return (
+    <Reorder.Group
+      axis="y"
+      values={order}
+      onReorder={(newOrder) => {
+        if (!isLocked) onSelect(idx, newOrder);
+      }}
+      className="space-y-2"
+    >
+      {order.map((item, pos) => {
+        const tinted = question.correctOrder
+          ? question.correctOrder[pos] === item
+            ? "border-green bg-green/10"
+            : "border-coral bg-coral/10"
+          : "border-ink/10 bg-white";
+        return (
+          <Reorder.Item
+            key={item}
+            value={item}
+            drag={!isLocked}
+            className={`flex items-center gap-3 p-3 rounded-[var(--radius-btn)] border-2 font-mono ${tinted} ${isLocked ? "cursor-not-allowed opacity-80" : "cursor-grab active:cursor-grabbing"}`}
+          >
+            <GripVertical size={16} className="text-ink/30 shrink-0" />
+            <span className="flex-1">{item}</span>
+          </Reorder.Item>
+        );
+      })}
+    </Reorder.Group>
   );
 }
