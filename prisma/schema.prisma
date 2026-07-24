@@ -39,6 +39,7 @@ model User {
   quizComments      QuizComment[]
   hostedRooms       Room[]            @relation("RoomHost")
   roomParticipation RoomParticipant[]
+  teamsIntegration  TeamsIntegration?
 
   @@index([email], map: "idx_users_email")
   @@index([clerkId], map: "idx_users_clerk")
@@ -76,17 +77,18 @@ model TeamMember {
 }
 
 model Quiz {
-  id          String    @id @default(uuid()) @db.Uuid
-  title       String    @db.VarChar(255)
-  description String?
-  questions   Json?
-  settings    Json      @default("{}")
-  isActive    Boolean   @default(false) @map("is_active")
-  status      String    @default("draft") @db.VarChar(20)
-  startedAt   DateTime? @map("started_at") @db.Timestamptz
-  endedAt     DateTime? @map("ended_at") @db.Timestamptz
-  creatorId   String?   @map("creator_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id                String    @id @default(uuid()) @db.Uuid
+  title             String    @db.VarChar(255)
+  description       String?
+  questions         Json?
+  settings          Json      @default("{}")
+  isActive          Boolean   @default(false) @map("is_active")
+  status            String    @default("draft") @db.VarChar(20)
+  startedAt         DateTime? @map("started_at") @db.Timestamptz
+  endedAt           DateTime? @map("ended_at") @db.Timestamptz
+  creatorId         String?   @map("creator_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  scoresPublishedAt DateTime? @map("scores_published_at") @db.Timestamptz
 
   creator          User?             @relation("QuizCreator", fields: [creatorId], references: [id])
   submissions      Submission[]
@@ -225,4 +227,26 @@ model AppSetting {
   updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
 
   @@map("app_settings")
+}
+
+// One Microsoft Teams channel webhook per teacher/admin account (there is no
+// "class" entity in this schema — Quiz.creatorId -> User is the only
+// teacher-owns-content relationship, so the integration is scoped to the
+// owning account: every quiz that teacher creates publishes to this same
+// channel). `webhookUrlEnc` is AES-256-GCM ciphertext (see lib/teams-crypto.ts)
+// — the plaintext Power Automate URL is a bearer secret (Teams embeds a
+// signature in its query string) and must never be sent to the browser.
+model TeamsIntegration {
+  id            String    @id @default(uuid()) @db.Uuid
+  ownerId       String    @unique @map("owner_id") @db.Uuid
+  webhookUrlEnc String    @map("webhook_url_enc")
+  label         String?   @db.VarChar(120)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz
+  lastTestedAt  DateTime? @map("last_tested_at") @db.Timestamptz
+  lastTestOk    Boolean?  @map("last_test_ok")
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("teams_integrations")
 }

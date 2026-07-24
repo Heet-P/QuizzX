@@ -2045,3 +2045,104 @@ by the agent (Section 9's standing note) — flagged to the user to confirm
 real quiz scores now compute correctly end-to-end (not just via the
 verification script) and that the reworked fill now actually looks like
 the reference.
+
+## 25. Microsoft Teams Score Publishing (2026-07-24)
+
+Full feature: a "Publish Scores" button that posts a quiz's completed
+submissions (student ID + score, one line each) into a pre-linked Microsoft
+Teams channel, via a **Workflows (Power Automate) webhook** — Teams retired
+the old Incoming Webhook connector; the current supported path is a
+Teams-side workflow built from the "Post to a channel when a webhook
+request is received" template, which hands back a one-time HTTP POST URL.
+
+**Scope decision**: there is no "Class" entity anywhere in this schema —
+`Quiz.creatorId -> User` is the only teacher-owns-content relationship,
+`Team` is a competitive quiz-taking group, not a class. So the webhook is
+scoped **per teacher/admin account** (new `TeamsIntegration` model, 1:1 on
+`ownerId`), not per class — every quiz that account creates shares its one
+linked channel. `publish-scores` always uses the **quiz's creator's**
+integration, not the calling user's — an admin publishing on a teacher's
+behalf still posts to that teacher's channel.
+
+**Payload format** — verified against current Microsoft docs/community
+threads, not memory, because this is exactly the kind of thing that goes
+stale:
+- Body must be `{"type":"message","attachments":[{"contentType":
+  "application/vnd.microsoft.card.adaptive","content": <AdaptiveCard>}]}`,
+  `Content-Type: application/json` (wrong/missing content-type → 400).
+- **Success is HTTP 202 Accepted, not 200** — the flow runs async. Every
+  caller here checks `res.ok`, never a specific status code.
+- Hard cap of **28KB per message**.
+- Adaptive Cards gained a proper `Table` element in **schema v1.5**, but
+  Teams mobile only reliably renders up to v1.2, and there are open
+  rendering-bug reports of `Table` simply not rendering in Teams channels
+  specifically (see microsoft/AdaptiveCards#7101). So the roster is built
+  as a stack of `ColumnSet`s (3 columns: name/ID/score, explicit relative
+  `width`s) instead — supported since v1.0, renders consistently as an
+  aligned grid on every Teams client. `lib/teams-publish.ts` has the full
+  reasoning inline.
+- A single flow trigger throttles somewhere around ~4 requests/sec, so
+  multi-message batches post **sequentially with a 400ms delay**, never
+  concurrently.
+
+**Size/roster-limit handling** (`lib/teams-publish.ts`): rows are packed
+into chunks that fit a conservative ~22KB budget (measuring actual
+`JSON.stringify` byte length per row, not guessing), each chunk = one
+message, titled "(part i/n)" when there's more than one. If packing would
+take more than 5 messages, it sends **one summary card instead** (student
+count, average score, top 10, an `Action.OpenUrl` link back to
+`/leaderboard?quizId=...`) rather than spamming the channel. Verified
+against a live roster-size sweep (real HTTP calls to httpbin.org as a
+Teams-webhook stand-in, run outside the Next.js process via `tsx` +
+`--conditions=react-server` to satisfy the `server-only` import): 50 rows
+→ 1 message, 100 → 2, 150 → 3, 200 → 4, 250 → 5, 400 → summary fallback.
+Exactly the intended staircase.
+
+**Secret handling**: the webhook URL is a bearer secret (Teams embeds a
+signature in its query string) and must never reach the browser per the
+spec. `lib/teams-crypto.ts` does AES-256-GCM (`TEAMS_WEBHOOK_ENCRYPTION_KEY`
+env var, 32 raw bytes base64 — `openssl rand -base64 32`), storing
+`iv:authTag:ciphertext` as one string. `GET /api/teacher/teams-integration`
+only ever returns `{configured, label, lastTestedAt, lastTestOk}` — never
+the URL, not even a masked suffix. Verified end-to-end against the real
+Neon DB (not just unit-level): encrypt → store → fetch → decrypt matches
+original; a tampered ciphertext throws (auth tag check working); the
+GET route's own `select` shape genuinely has no `webhookUrlEnc` key.
+
+**New routes**: `app/api/teacher/teams-integration/route.ts` (GET status /
+PUT save+encrypt / DELETE unlink) and `.../test/route.ts` (send a test
+card), both `requireApiTeacherOrAdmin`. `app/api/admin/quizzes/[id]/
+publish-scores/route.ts` (`requireApiTeacherOrAdmin` + explicit
+`quiz.creatorId === user.id` check for non-admins). `Quiz.scoresPublishedAt`
+tracks last-published state, surfaced via the existing `/api/admin/quizzes`
+list response (`scores_published_at`).
+
+**New UI**: `components/admin/TeamsIntegrationSettings.tsx` (paste URL,
+save, send test message, unlink — modeled on `DailyChallengePanel`'s
+shared-section pattern), dropped into both `/admin` and `/teacher`. A
+"Publish Scores" button added to both `QuizManager.tsx` (the component
+`/admin` actually uses) and `TeacherPage`'s own separate inline quiz-row
+JSX (it doesn't import `QuizManager` despite that file's stale header
+comment claiming otherwise — confirmed by grep, only `/admin` imports it)
+— shows "Published Xh ago" once set, and re-clicking an already-published
+quiz requires confirming through the existing `ConfirmModal`, so a second
+click can't silently re-fire.
+
+**Known pre-existing gap, deliberately not expanded into**: `/api/admin/
+quizzes` (the list both dashboards call) is hard `requireApiAdmin`-only
+today — already flagged in this codebase's own comments as deferred
+("Phase 3, not built"/"audit flags this as a real gap"). A real
+`teacher`-role account therefore can't load its quiz list yet regardless
+of this feature, so only admin accounts can exercise the whole flow
+end-to-end today. `publish-scores` and `teams-integration` themselves are
+still correctly teacher-owner-scoped from day one — they're just blocked
+by that separate, pre-existing gap until it's fixed, which was out of
+scope for this task.
+
+Migration note: the `teams_score_publishing` migration had a side effect —
+Prisma's diff engine doesn't track `idx_submission_events_quiz_id` (a
+hand-written index from the `partial_indexes_and_seed` migration, never
+expressible in the schema DSL) and dropped it as "drift". Restored via a
+follow-up migration (`restore_submission_events_quiz_id_index`) with the
+identical original DDL, same pattern the project already established for
+un-representable indexes.

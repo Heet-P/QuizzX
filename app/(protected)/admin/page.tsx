@@ -5,6 +5,7 @@ import { Shield, Eye, Key } from "lucide-react";
 import { QuizManager, type ManagedQuiz } from "@/components/admin/QuizManager";
 import { QuizUploader } from "@/components/admin/QuizUploader";
 import { DailyChallengePanel } from "@/components/admin/DailyChallengePanel";
+import { TeamsIntegrationSettings } from "@/components/admin/TeamsIntegrationSettings";
 import { useToast } from "@/components/Toast";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
@@ -96,6 +97,8 @@ export default function AdminPage() {
           </button>
         </div>
       </section>
+
+      <TeamsIntegrationSettings />
 
       <QuizManager quizzes={quizzes} fetchQuizzes={fetchQuizzes} />
 

@@ -23,6 +23,7 @@ export async function GET() {
       created_at: q.createdAt,
       started_at: q.startedAt,
       ended_at: q.endedAt,
+      scores_published_at: q.scoresPublishedAt,
       submission_count: q._count.submissions,
       questionCount: Array.isArray(q.questions) ? (q.questions as unknown as QuizQuestion[]).length : 0,
     }))

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { BookOpen, BarChart2, Rocket, Archive, AlertCircle, X, ChevronRight, Users } from "lucide-react";
+import { BookOpen, BarChart2, Rocket, Archive, AlertCircle, X, ChevronRight, Users, MessagesSquare } from "lucide-react";
 import { QuizUploader } from "@/components/admin/QuizUploader";
 import { DailyChallengePanel } from "@/components/admin/DailyChallengePanel";
+import { TeamsIntegrationSettings } from "@/components/admin/TeamsIntegrationSettings";
 import { useToast } from "@/components/Toast";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { apiFetch, errorMessage } from "@/lib/api-client";
+import { timeAgo } from "@/lib/time-ago";
 import type { QuizSettings } from "@/types/quiz";
 
 interface TeacherQuiz {
@@ -16,6 +18,7 @@ interface TeacherQuiz {
   is_active?: boolean;
   submission_count?: number;
   settings?: QuizSettings;
+  scores_published_at?: string | null;
 }
 
 interface QuestionAnalytics {
@@ -166,6 +169,7 @@ export default function TeacherPage() {
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
   const [analyticsQuiz, setAnalyticsQuiz] = useState<TeacherQuiz | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [publishingScores, setPublishingScores] = useState<Record<string, boolean>>({});
 
   const fetchQuizzes = useCallback(async () => {
     try {
@@ -216,6 +220,40 @@ export default function TeacherPage() {
         } catch (err) {
           toast.error(errorMessage(err, "Failed to archive quiz"));
         }
+      },
+    });
+  };
+
+  const doPublishScores = async (quizId: string) => {
+    setPublishingScores((prev) => ({ ...prev, [quizId]: true }));
+    try {
+      const data = await apiFetch<{ studentCount: number; usedSummaryFallback: boolean }>(`/api/admin/quizzes/${quizId}/publish-scores`, {
+        method: "POST",
+      });
+      fetchQuizzes();
+      toast.success(
+        data.usedSummaryFallback
+          ? `Roster too large to list in full — posted a summary for ${data.studentCount} students instead`
+          : `Posted scores for ${data.studentCount} students to Teams`
+      );
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to publish scores to Teams"));
+    } finally {
+      setPublishingScores((prev) => ({ ...prev, [quizId]: false }));
+    }
+  };
+
+  const handlePublishScores = (quizId: string, alreadyPublished: boolean) => {
+    if (!alreadyPublished) {
+      doPublishScores(quizId);
+      return;
+    }
+    setConfirmModal({
+      title: "Re-publish Scores?",
+      message: "This quiz's scores were already posted to Teams. Publishing again will send another message to the channel.",
+      onConfirm: () => {
+        setConfirmModal(null);
+        doPublishScores(quizId);
       },
     });
   };
@@ -300,6 +338,17 @@ export default function TeacherPage() {
                           <Archive size={15} /> Archive
                         </button>
                       )}
+                      {status !== "draft" && (
+                        <button
+                          onClick={() => handlePublishScores(quiz.id, !!quiz.scores_published_at)}
+                          disabled={publishingScores[quiz.id]}
+                          title={quiz.scores_published_at ? `Last posted to Teams ${timeAgo(quiz.scores_published_at)}` : "Post scores to the linked Teams channel"}
+                          className={`btn-tactile text-sm disabled:opacity-50 ${quiz.scores_published_at ? "bg-white" : "bg-purple text-white"}`}
+                        >
+                          <MessagesSquare size={15} />
+                          {publishingScores[quiz.id] ? "Posting…" : quiz.scores_published_at ? `Posted ${timeAgo(quiz.scores_published_at)}` : "Publish Scores"}
+                        </button>
+                      )}
 
                       <a href={`/admin/proctor/${quiz.id}`} className="btn-tactile bg-purple text-white text-sm" title="View Proctor Dashboard">
                         <ChevronRight size={15} /> Proctor
@@ -311,6 +360,8 @@ export default function TeacherPage() {
             </div>
           )}
         </section>
+
+        <TeamsIntegrationSettings />
 
         <DailyChallengePanel />
 

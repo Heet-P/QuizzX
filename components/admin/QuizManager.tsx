@@ -2,10 +2,30 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Trash2, Rocket, Archive, Users, User, BarChart2, FileText, Shield, ChevronDown, ChevronUp, Star, Circle, CircleDot, Square, Key, Shuffle } from "lucide-react";
+import {
+  Zap,
+  Trash2,
+  Rocket,
+  Archive,
+  Users,
+  User,
+  BarChart2,
+  FileText,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+  Star,
+  Circle,
+  CircleDot,
+  Square,
+  Key,
+  Shuffle,
+  MessagesSquare,
+} from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { apiFetch, apiFetchBlob, errorMessage } from "@/lib/api-client";
+import { timeAgo } from "@/lib/time-ago";
 import type { QuizSettings } from "@/types/quiz";
 
 export interface ManagedQuiz {
@@ -16,6 +36,7 @@ export interface ManagedQuiz {
   settings?: QuizSettings;
   submission_count?: number;
   started_at?: string | null;
+  scores_published_at?: string | null;
 }
 
 interface QuestionAnalytics {
@@ -55,6 +76,7 @@ export function QuizManager({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<Record<string, QuizAnalyticsData>>({});
   const [loadingAnalytics, setLoadingAnalytics] = useState<Record<string, boolean>>({});
+  const [publishingScores, setPublishingScores] = useState<Record<string, boolean>>({});
   const [confirm, setConfirm] = useState<{ title: string; message: string; danger?: boolean; onConfirm: () => void } | null>(null);
 
   const handlePublish = async (quizId: string) => {
@@ -65,6 +87,40 @@ export function QuizManager({
     } catch (err) {
       toast.error(errorMessage(err, "Failed to publish quiz"));
     }
+  };
+
+  const doPublishScores = async (quizId: string) => {
+    setPublishingScores((prev) => ({ ...prev, [quizId]: true }));
+    try {
+      const data = await apiFetch<{ studentCount: number; usedSummaryFallback: boolean }>(`/api/admin/quizzes/${quizId}/publish-scores`, {
+        method: "POST",
+      });
+      fetchQuizzes();
+      toast.success(
+        data.usedSummaryFallback
+          ? `Roster too large to list in full — posted a summary for ${data.studentCount} students instead`
+          : `Posted scores for ${data.studentCount} students to Teams`
+      );
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to publish scores to Teams"));
+    } finally {
+      setPublishingScores((prev) => ({ ...prev, [quizId]: false }));
+    }
+  };
+
+  const handlePublishScores = (quizId: string, alreadyPublished: boolean) => {
+    if (!alreadyPublished) {
+      doPublishScores(quizId);
+      return;
+    }
+    setConfirm({
+      title: "Re-publish Scores?",
+      message: "This quiz's scores were already posted to Teams. Publishing again will send another message to the channel.",
+      onConfirm: () => {
+        setConfirm(null);
+        doPublishScores(quizId);
+      },
+    });
   };
 
   const handleArchive = (quizId: string) => {
@@ -233,6 +289,17 @@ export function QuizManager({
                             <Archive size={14} /> Archive
                           </button>
                         </>
+                      )}
+                      {status !== "draft" && (
+                        <button
+                          onClick={() => handlePublishScores(quiz.id, !!quiz.scores_published_at)}
+                          disabled={publishingScores[quiz.id]}
+                          title={quiz.scores_published_at ? `Last posted to Teams ${timeAgo(quiz.scores_published_at)}` : "Post scores to the linked Teams channel"}
+                          className={`btn-tactile text-xs py-2 px-3 disabled:opacity-50 ${quiz.scores_published_at ? "bg-white" : "bg-purple text-white"}`}
+                        >
+                          <MessagesSquare size={14} />
+                          {publishingScores[quiz.id] ? "Posting…" : quiz.scores_published_at ? `Posted ${timeAgo(quiz.scores_published_at)}` : "Publish Scores"}
+                        </button>
                       )}
                       <button
                         onClick={() => handleDownloadIntegrity(quiz.id, quiz.title)}
