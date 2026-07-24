@@ -2146,3 +2146,22 @@ expressible in the schema DSL) and dropped it as "drift". Restored via a
 follow-up migration (`restore_submission_events_quiz_id_index`) with the
 identical original DDL, same pattern the project already established for
 un-representable indexes.
+
+**25.1 — Webhook URL hostname is not stable, don't validate against it.**
+The user's real tenant produced a webhook URL on the host
+`default<guid>.<region>.environment.api.powerplatform.com` — not
+`prod-XX.<region>.logic.azure.com`, which is what every blog post/doc used
+for Section 25's original research and what `isPlausibleWorkflowsUrl` in
+`app/api/teacher/teams-integration/route.ts` originally checked against
+(would have rejected this real URL outright). Microsoft has apparently
+moved these onto a Power Platform-routed host at least once already, so
+the validator now checks the parts that are actually stable across both
+observed formats instead: `https:` scheme, a `/triggers/manual/paths/
+invoke` path segment, and a `sig=` query param — plus hostname ending in
+either `.logic.azure.com` or `.powerplatform.com` (both allowed, since
+either could show up depending on tenant/age of the workflow). Also: the
+Teams UI's template name for this has changed too — users are now seeing
+"Send webhook alerts to a channel" rather than "Post to a channel when a
+webhook request is received" (confirmed both names are current/valid via
+search, likely a Teams-version/tenant difference) — the in-app help text
+in `TeamsIntegrationSettings.tsx` mentions both rather than asserting one.

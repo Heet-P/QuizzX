@@ -130,11 +130,13 @@ export function TeamsIntegrationSettings() {
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
             className="input-tactile font-mono text-xs"
-            placeholder="https://prod-XX.<region>.logic.azure.com/workflows/.../triggers/manual/paths/invoke?..."
+            placeholder="https://.../triggers/manual/paths/invoke?...&sig=..."
             autoComplete="off"
           />
           <p className="text-xs font-accent font-bold text-ink/50 mt-1">
-            In Teams: open the channel → Workflows → &ldquo;Post to a channel when a webhook request is received&rdquo; → copy the URL it gives you.
+            In Teams: open the channel → Workflows → look for the webhook-alert template (worded something like
+            &ldquo;Send webhook alerts to a channel&rdquo; or &ldquo;Post to a channel when a webhook request is received&rdquo;
+            depending on your Teams version) → pick this channel → copy the URL it gives you.
             {status?.configured && " Pasting a new one here replaces the current channel."}
           </p>
         </div>
