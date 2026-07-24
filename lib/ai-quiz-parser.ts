@@ -31,9 +31,10 @@ interface RawParsedQuestion {
   pairs?: { left?: unknown; right?: unknown }[];
   explanation?: string;
   topic?: string;
+  items?: unknown[];
 }
 
-const VALID_TYPES: QuestionType[] = ["mcq_single", "mcq_multi", "fill_blank", "match_columns"];
+const VALID_TYPES: QuestionType[] = ["mcq_single", "mcq_multi", "fill_blank", "match_columns", "ordering"];
 
 function coerceQuestion(raw: RawParsedQuestion): QuizQuestion | null {
   const text = String(raw.text || raw.question || "").trim();
@@ -69,6 +70,11 @@ function coerceQuestion(raw: RawParsedQuestion): QuizQuestion | null {
       if (pairs.length < 2) return null;
       return { type: "match_columns", text, pairs, explanation, topic };
     }
+    case "ordering": {
+      const items = Array.isArray(raw.items) ? raw.items.map((i) => String(i).trim()).filter(Boolean) : [];
+      if (items.length < 2) return null;
+      return { type: "ordering", text, items, explanation, topic };
+    }
     default:
       // Unreachable today: VALID_TYPES only lists the 4 types this function
       // classifies into, so `type` is coerced to "mcq_single" for anything
@@ -86,7 +92,7 @@ function coerceQuestion(raw: RawParsedQuestion): QuizQuestion | null {
  * filtering pattern as generateQuestions).
  */
 export async function parseQuizDocumentWithAI(rawText: string): Promise<QuizQuestion[]> {
-  const prompt = `You are extracting quiz questions from a document. Read the raw text below and identify every question. For EACH question, classify it into exactly one of these 4 types and output the matching JSON shape:
+  const prompt = `You are extracting quiz questions from a document. Read the raw text below and identify every question. For EACH question, classify it into exactly one of these 5 types and output the matching JSON shape:
 
 1. "mcq_single" — single correct answer from a list of options:
    {"type":"mcq_single","text":"<question>","options":["opt1","opt2",...],"answer":"<the correct option, copied exactly from options>","explanation":"<optional>","topic":"<optional>"}
@@ -100,8 +106,12 @@ export async function parseQuizDocumentWithAI(rawText: string): Promise<QuizQues
 4. "match_columns" — a "match the following" question pairing items from two columns:
    {"type":"match_columns","text":"<question, e.g. Match the following>","pairs":[{"left":"<item>","right":"<its correct match>"}, ...],"explanation":"<optional>","topic":"<optional>"}
 
+5. "ordering" — a question asking to arrange/order/sequence items correctly (e.g. chronological events, steps of a process, algorithm steps). List "items" in the CORRECT order as they should be in the answer, not shuffled — the app shuffles them for display separately:
+   {"type":"ordering","text":"<question>","items":["<item in correct order 1>","<item in correct order 2>",...],"explanation":"<optional>","topic":"<optional>"}
+
 Rules:
 - Classify based on what the document actually shows — do not force everything into mcq_single.
+- Only use "ordering" when the source material genuinely describes a sequence (steps, chronological order, ranked order) — don't force it onto content that's naturally a different type.
 - For options/answers, copy text exactly as written in the source (no re-wording).
 - Skip anything that isn't actually a question (headings, instructions, page numbers).
 - Output ONLY a valid JSON array of question objects, no markdown fences, no commentary.
