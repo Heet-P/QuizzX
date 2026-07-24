@@ -504,32 +504,53 @@ function MatchColumnsBody({ question, idx, answer, isLocked, onSelect }: TypeBod
  * already uses for its own practice-mode coloring.
  */
 function OrderingBody({ question, idx, answer, isLocked, onSelect }: TypeBodyProps<OrderingSanitized, string[]>) {
-  const order = answer.length === question.items.length ? answer : question.items;
+  // Each item gets a stable identity independent of its text, since Framer
+  // Motion's Reorder tracks position by `value` equality (verified against
+  // its source) — using item TEXT as that value would silently corrupt drag
+  // tracking for questions with duplicate-text items. `keyedItems` is this
+  // component's own source of truth for order, built once from the sanitized
+  // (already-shuffled) display order or a previously-saved answer — never
+  // reconstructed from `answer` on later renders, which would be ambiguous
+  // for duplicate text anyway (and doesn't matter: scoring only cares about
+  // the final text sequence, not which id underlies which slot).
+  const [keyedItems, setKeyedItems] = useState(() =>
+    (answer.length === question.items.length ? answer : question.items).map((text, i) => ({ id: i, text }))
+  );
+  // Ordering has no "empty" initial state (unlike MatchColumnsBody, which
+  // starts with zero connections) — the shuffled list always shows a
+  // complete permutation from first render, so some positions can
+  // coincidentally sit in their correct slot purely by chance of the
+  // shuffle. Gate practice-mode coloring on having dragged at least once,
+  // so it never leaks the answer key before the student attempts the
+  // question — parallels MatchColumnsBody's "nothing colors until
+  // connected" gating, adapted to this type's always-fully-populated
+  // starting state.
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  const handleReorder = (newOrder: { id: number; text: string }[]) => {
+    setKeyedItems(newOrder);
+    setHasInteracted(true);
+    if (!isLocked) onSelect(idx, newOrder.map((k) => k.text));
+  };
 
   return (
-    <Reorder.Group
-      axis="y"
-      values={order}
-      onReorder={(newOrder) => {
-        if (!isLocked) onSelect(idx, newOrder);
-      }}
-      className="space-y-2"
-    >
-      {order.map((item, pos) => {
-        const tinted = question.correctOrder
-          ? question.correctOrder[pos] === item
-            ? "border-green bg-green/10"
-            : "border-coral bg-coral/10"
-          : "border-ink/10 bg-white";
+    <Reorder.Group axis="y" values={keyedItems} onReorder={handleReorder} className="space-y-2">
+      {keyedItems.map((k, pos) => {
+        const tinted =
+          hasInteracted && question.correctOrder
+            ? question.correctOrder[pos] === k.text
+              ? "border-green bg-green/10"
+              : "border-coral bg-coral/10"
+            : "border-ink/10 bg-white";
         return (
           <Reorder.Item
-            key={item}
-            value={item}
+            key={k.id}
+            value={k}
             drag={!isLocked}
             className={`flex items-center gap-3 p-3 rounded-[var(--radius-btn)] border-2 font-mono ${tinted} ${isLocked ? "cursor-not-allowed opacity-80" : "cursor-grab active:cursor-grabbing"}`}
           >
             <GripVertical size={16} className="text-ink/30 shrink-0" />
-            <span className="flex-1">{item}</span>
+            <span className="flex-1">{k.text}</span>
           </Reorder.Item>
         );
       })}
